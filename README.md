@@ -1,0 +1,3 @@
+# teaching
+
+Various visuals.
