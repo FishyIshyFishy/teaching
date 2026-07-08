@@ -1,0 +1,346 @@
+<title>RC Filter Lab</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    min-height: 100vh; padding: clamp(14px, 2.4vw, 34px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .shell { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; gap: 3px; }
+  .seg button {
+    font-family: var(--mono); font-size: .78rem; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); background: transparent; border: 0; padding: 8px 18px; border-radius: 6px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .stage {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: clamp(360px, 56vw, 500px); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; padding: 2px; }
+  .btn {
+    font-family: var(--mono); font-size: .82rem; letter-spacing: .04em;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .btn.on .dot { background: #5fd08a; box-shadow: 0 0 9px #5fd08a; }
+
+  .ctrl { display: flex; flex-direction: column; gap: 7px; min-width: 150px; flex: 1 1 160px; max-width: 320px; }
+  .ctrl .lab { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-moz-range-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+
+  .hide { display: none !important; }
+  button:focus-visible, input:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">Series RC</span>
+      <div class="seg" role="group" aria-label="Source mode">
+        <button id="mode-dc" aria-pressed="true">DC step</button>
+        <button id="mode-ac" aria-pressed="false">AC</button>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="circuit" aria-label="Live RC circuit: capacitor charge filling toward the input, with the gap across the resistor"></canvas></div>
+
+    <div class="deck">
+      <button class="btn" id="source-toggle"><span class="dot"></span><span id="source-label">Turn on</span></button>
+
+      <div class="ctrl hide" id="freq-ctrl">
+        <div class="lab"><span>slow</span><span>frequency</span><span>fast</span></div>
+        <input type="range" id="freq-slider" min="-1" max="1" step="0.001" value="0" aria-label="Source frequency">
+      </div>
+
+      <div class="ctrl">
+        <div class="lab"><span>R</span><span></span></div>
+        <input type="range" id="r-slider" min="0.3" max="3" step="0.01" value="1" aria-label="Resistance">
+      </div>
+      <div class="ctrl">
+        <div class="lab"><span>C</span><span></span></div>
+        <input type="range" id="c-slider" min="0.3" max="3" step="0.01" value="1" aria-label="Capacitance">
+      </div>
+
+      <button class="btn primary" id="play-btn">Pause</button>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const mix = (a, b, t) => {   // blend two #rrggbb colours
+    t = clamp(t, 0, 1);
+    const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const [ar, ag, ab] = p(a), [br, bg, bb] = p(b);
+    return `rgb(${Math.round(lerp(ar, br, t))},${Math.round(lerp(ag, bg, t))},${Math.round(lerp(ab, bb, t))})`;
+  };
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const cssv = getComputedStyle(document.documentElement);
+  const MONO = cssv.getPropertyValue("--mono");
+
+  // theme-aware colours
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), sc: g("--sig-c"), sr: g("--sig-r"),
+      accent: g("--accent"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const S = {
+    mode: "dc", running: true, dcOn: false,
+    R: 1, Cc: 1, xLog: 0,
+    t: 0, Vin: 0, Vc: 0, Vr: 0, i: 0, dotPhase: 0, flash: 0,
+  };
+  const A = 1, SIM_RATE = 1.7;
+  const tau = () => S.R * S.Cc;
+  const fc = () => 1 / (2 * Math.PI * tau());
+  const freqRatio = () => Math.pow(10, S.xLog);
+  const omega = () => 2 * Math.PI * freqRatio() * fc();
+  const vinAt = (t) => S.mode === "dc" ? (S.dcOn ? A : 0) : A * Math.sin(omega() * t);
+
+  // ---- simulation (exponential Euler; verified exact against 1/sqrt(1+x^2)) ----
+  function step(dtReal) {
+    if (!S.running) return;
+    const dt = Math.min(dtReal, 0.05) * SIM_RATE, sub = 24, h = dt / sub, tc = tau();
+    for (let k = 0; k < sub; k++) { S.t += h; const vin = vinAt(S.t); S.Vc = vin + (S.Vc - vin) * Math.exp(-h / tc); }
+    S.Vin = vinAt(S.t); S.Vr = S.Vin - S.Vc; S.i = S.Vr / S.R;
+    S.dotPhase += S.i * dt * 1.4;
+  }
+
+  // ---- canvas ----
+  const cv = $("circuit"); let ctx, W, H, DPR;
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  function segdots(pts, phase, dir, count, iMag) {
+    let total = 0; const segs = [];
+    for (let k = 0; k < pts.length - 1; k++) {
+      const dx = pts[k + 1][0] - pts[k][0], dy = pts[k + 1][1] - pts[k][1], len = Math.hypot(dx, dy);
+      segs.push({ a: pts[k], b: pts[k + 1], len, off: total }); total += len;
+    }
+    for (let d = 0; d < count; d++) {
+      let s = ((((d / count) + phase) % 1) + 1) % 1 * total;
+      let sg = segs[0]; for (const q of segs) if (s >= q.off && s <= q.off + q.len) { sg = q; break; }
+      const f = sg.len ? (s - sg.off) / sg.len : 0;
+      const x = lerp(sg.a[0], sg.b[0], f), y = lerp(sg.a[1], sg.b[1], f);
+      ctx.globalAlpha = 0.3 + 0.6 * iMag; ctx.fillStyle = C.accent;
+      ctx.beginPath(); ctx.arc(x, y, 4.6, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const line = (x1, y1, x2, y2, col, wid) => { ctx.strokeStyle = col; ctx.lineWidth = wid || 2.4; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    const wire = C.muted;
+
+    const srcX = W * 0.12, midY = H * 0.5, srcR = Math.min(28, H * 0.07);
+    const topY = H * 0.14, botY = H * 0.87;
+    const rL = W * 0.24, rR = W * 0.44;
+    const capX = W * 0.70, capW = clamp(W * 0.13, 78, 124), half = capW / 2;
+    const pTop = H * 0.20, pBot = H * 0.80;            // capacitor plates
+    const vmin = S.mode === "dc" ? 0 : -1.12, vmax = 1.12;
+    const yFor = (v) => lerp(pBot - 4, pTop + 4, (clamp(v, vmin, vmax) - vmin) / (vmax - vmin));
+    const y0 = yFor(0);
+    const iMag = clamp(Math.abs(S.i) / (A / S.R), 0, 1), dir = Math.sign(S.i || 1);
+
+    // ---------- wires ----------
+    line(srcX, midY - srcR, srcX, topY, wire); line(srcX, midY + srcR, srcX, botY, wire);
+    line(srcX, topY, rL, topY, wire); line(rR, topY, capX, topY, wire);
+    line(capX, topY, capX, pTop, wire);
+    line(capX, pBot, capX, botY, wire); line(capX, botY, srcX, botY, wire);
+
+    // ---------- source (DC: clearly energized when on, dim when off) ----------
+    const srcOn = S.mode === "ac" || S.dcOn;
+    ctx.save();
+    if (srcOn) {                                   // energized: amber, faint fill, glow
+      ctx.fillStyle = C.sin; ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.arc(srcX, midY, srcR, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      if (S.mode === "dc") { ctx.shadowColor = C.sin; ctx.shadowBlur = 16; }
+    }
+    ctx.strokeStyle = srcOn ? C.sin : C.muted; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(srcX, midY, srcR, 0, 7); ctx.stroke();
+    ctx.restore();
+
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    if (S.mode === "ac") {
+      ctx.strokeStyle = C.sin; ctx.lineWidth = 2;
+      ctx.beginPath(); for (let k = 0; k <= 24; k++) { const px = srcX - 13 + 26 * k / 24, py = midY - 9 * Math.sin(k / 24 * 6.283); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke();
+    } else if (S.dcOn) {                            // ON: bright + / –
+      ctx.fillStyle = C.sin; ctx.font = "600 16px " + MONO;
+      ctx.fillText("+", srcX, midY - 12); ctx.fillText("–", srcX, midY + 13);
+    } else {                                        // OFF: dim + / – and a "0 V" tag
+      ctx.fillStyle = C.muted; ctx.globalAlpha = .4; ctx.font = "600 16px " + MONO;
+      ctx.fillText("+", srcX, midY - 12); ctx.fillText("–", srcX, midY + 13);
+      ctx.globalAlpha = 1;
+    }
+    // state tag under the source
+    ctx.font = "600 11px " + MONO; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    if (S.mode === "dc") { ctx.fillStyle = srcOn ? C.sin : C.muted; ctx.fillText(srcOn ? "ON" : "OFF", srcX, midY + srcR + 14); }
+
+    // ---------- resistor (brightness tracks the actual current) ----------
+    ctx.save();
+    ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.lineWidth = 2.6;
+    ctx.strokeStyle = mix(C.muted, C.sr, iMag);
+    ctx.shadowColor = C.sr; ctx.shadowBlur = 12 * iMag;
+    ctx.beginPath(); ctx.moveTo(rL, topY); const seg = (rR - rL) / 6;
+    for (let k = 0; k < 6; k++) ctx.lineTo(rL + seg * (k + 0.5), topY + (k % 2 ? 10 : -10));
+    ctx.lineTo(rR, topY); ctx.stroke(); ctx.restore();
+
+    // ---------- current arrow above the resistor (size = |i| = V_R/R) ----------
+    if (iMag > 0.02) {
+      const cx = (rL + rR) / 2, yA = topY - 34;
+      const halfLen = 12 + iMag * (rR - rL) * 0.44, thick = 3 + iMag * 5;
+      const tipX = cx + dir * halfLen, tailX = cx - dir * halfLen;
+      ctx.strokeStyle = C.sr; ctx.fillStyle = C.sr; ctx.lineWidth = thick; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(tailX, yA); ctx.lineTo(tipX - dir * 2, yA); ctx.stroke();
+      const ah = 6 + iMag * 6;
+      ctx.beginPath(); ctx.moveTo(tipX, yA); ctx.lineTo(tipX - dir * ah, yA - ah * 0.8); ctx.lineTo(tipX - dir * ah, yA + ah * 0.8); ctx.closePath(); ctx.fill();
+    }
+
+    // ---------- current dots ----------
+    segdots([[srcX, midY - srcR], [srcX, topY], [rL, topY], [rR, topY], [capX, topY], [capX, pTop]], S.dotPhase, dir, 9, iMag);
+    segdots([[capX, pBot], [capX, botY], [srcX, botY], [srcX, midY + srcR]], S.dotPhase, dir, 6, iMag);
+
+    // ---------- capacitor: opposite charge separates onto the two plates ----------
+    const gx = capX - half, gw = capW;
+    line(capX - half - 8, pTop, capX + half + 8, pTop, wire, 4);   // top plate
+    line(capX - half - 8, pBot, capX + half + 8, pBot, wire, 4);   // bottom plate
+
+    const q = clamp(Math.abs(S.Vc / A), 0, 1.1), vs = S.Vc >= 0 ? 1 : -1;
+    // electric field between the plates (density ~ V_C): the voltage the separation creates
+    const nF = Math.round(q * 7);
+    ctx.strokeStyle = C.sc; ctx.globalAlpha = 0.3; ctx.setLineDash([4, 5]);
+    for (let k = 0; k < nF; k++) { const x = gx + 8 + (gw - 16) * (nF === 1 ? 0.5 : k / (nF - 1)); line(x, pTop + 7, x, pBot - 7, C.sc, 1.4); }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // charges packed onto each plate (count ~ |V_C|); '+' on whichever plate the source drives high
+    const nQ = Math.round(q * 8), perRow = 8, colW = (gw - 22) / (perRow - 1);
+    ctx.font = "600 15px " + MONO; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (let k = 0; k < nQ; k++) {
+      const c = k % perRow, r = Math.floor(k / perRow), x = gx + 11 + c * colW;
+      ctx.fillStyle = vs > 0 ? C.sc : C.sr; ctx.fillText(vs > 0 ? "+" : "–", x, pTop + 15 + r * 15);
+      ctx.fillStyle = vs > 0 ? C.sr : C.sc; ctx.fillText(vs > 0 ? "–" : "+", x, pBot - 15 - r * 15);
+    }
+
+    // ---------- slim voltmeter beside the cap: V_C chases V_in, gap = V_R ----------
+    const mx = capX + half + 30, mw = 16, yc = yFor(S.Vc), yin = yFor(S.Vin), y0m = yFor(0);
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.strokeRect(mx, pTop, mw, pBot - pTop);
+    if (S.mode === "ac") { ctx.strokeStyle = C.grid; ctx.setLineDash([2, 4]); line(mx, y0m, mx + mw, y0m, C.grid, 1); ctx.setLineDash([]); }
+    if (Math.abs(yin - yc) > 1) { ctx.fillStyle = C.sr; ctx.globalAlpha = .5; ctx.fillRect(mx + 1, Math.min(yin, yc), mw - 2, Math.abs(yin - yc)); ctx.globalAlpha = 1; }
+    ctx.fillStyle = C.sc; ctx.globalAlpha = .85; ctx.fillRect(mx + 1, Math.min(y0m, yc), mw - 2, Math.abs(yc - y0m)); ctx.globalAlpha = 1;
+    line(mx, yc, mx + mw, yc, C.sc, 2.5);
+    ctx.strokeStyle = C.sin; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(mx - 7, yin); ctx.lineTo(mx + mw + 7, yin); ctx.stroke(); ctx.setLineDash([]);
+
+    // ---------- ground ----------
+    const grX = (srcX + capX) / 2;
+    line(grX, botY, grX, botY + 12, wire, 2);
+    line(grX - 10, botY + 12, grX + 10, botY + 12, wire, 2);
+    line(grX - 6, botY + 16, grX + 6, botY + 16, wire, 2);
+    line(grX - 2.5, botY + 20, grX + 2.5, botY + 20, wire, 2);
+
+    // ---------- labels (base letter + small subscript) ----------
+    const vlabel = (x, y, sub, col, align) => {
+      ctx.textBaseline = "middle"; ctx.font = "600 14px " + MONO;
+      const w1 = ctx.measureText("V").width;
+      const bx = align === "right" ? x - (w1 + 6) : x;
+      ctx.textAlign = "left"; ctx.fillStyle = col;
+      ctx.font = "600 14px " + MONO; ctx.fillText("V", bx, y);
+      ctx.font = "600 10px " + MONO; ctx.fillText(sub, bx + w1 + 0.5, y + 3);
+    };
+    vlabel(mx - 8, yin, "in", C.sin, "right");
+    vlabel(mx + mw + 12, yc, "C", C.sc, "left");
+    if (Math.abs(yin - yc) > 18) vlabel(mx + mw + 12, (yin + yc) / 2, "R", C.sr, "left");
+    ctx.fillStyle = C.muted; ctx.font = "12px " + MONO; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("R", (rL + rR) / 2, topY + 24);
+    ctx.fillText("C", capX, pBot + 36);
+  }
+
+  // ---- loop ----
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); requestAnimationFrame(frame); }
+
+  // ---- controls ----
+  function setMode(m) {
+    S.mode = m;
+    $("mode-dc").setAttribute("aria-pressed", m === "dc");
+    $("mode-ac").setAttribute("aria-pressed", m === "ac");
+    $("freq-ctrl").classList.toggle("hide", m !== "ac");
+    $("source-toggle").classList.toggle("hide", m !== "dc");
+    S.t = 0; S.Vc = 0; S.flash = 0;
+  }
+  $("mode-dc").onclick = () => setMode("dc");
+  $("mode-ac").onclick = () => setMode("ac");
+  $("source-toggle").onclick = () => {
+    S.dcOn = !S.dcOn;
+    $("source-toggle").classList.toggle("on", S.dcOn);
+    $("source-label").textContent = S.dcOn ? "Turn off" : "Turn on";
+  };
+  $("freq-slider").oninput = (e) => { S.xLog = parseFloat(e.target.value); };
+  $("r-slider").oninput = (e) => { S.R = parseFloat(e.target.value); };
+  $("c-slider").oninput = (e) => { S.Cc = parseFloat(e.target.value); };
+  $("play-btn").onclick = () => { S.running = !S.running; $("play-btn").textContent = S.running ? "Pause" : "Play"; last = performance.now(); };
+  $("reset-btn").onclick = () => { S.t = 0; S.Vc = 0; S.dcOn = false; S.flash = 0; $("source-toggle").classList.remove("on"); $("source-label").textContent = "Turn on"; };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); setMode("dc"); requestAnimationFrame(frame);
+})();
+</script>
