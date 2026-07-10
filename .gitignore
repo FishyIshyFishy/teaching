@@ -1,5 +1,8 @@
 .venv/
 media/
+ece20002-si/
+math-phys/
+optic-manimations/
 
 .pyc
 __pycache__/
