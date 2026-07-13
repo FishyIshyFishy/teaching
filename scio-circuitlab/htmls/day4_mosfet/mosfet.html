@@ -1,0 +1,507 @@
+<title>MOSFET — the voltage-built switch</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --ok: #1f9d57;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c; --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff; --ok: #1f9d57;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    min-height: 100vh; padding: clamp(14px, 2.4vw, 34px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .shell { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .barright { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; gap: 3px; }
+  .seg button {
+    font-family: var(--mono); font-size: .78rem; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); background: transparent; border: 0; padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .pill {
+    font-family: var(--mono); font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 600;
+    padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--panel-2);
+  }
+  .pill.on { color: var(--accent-ink); background: var(--ok); border-color: transparent; }
+
+  .stage {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: clamp(380px, 58vw, 520px); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--mono); font-size: .72rem; color: var(--muted); padding: 0 2px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; }
+  .mk { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
+  .mk.e { background: var(--sig-c); box-shadow: 0 0 7px var(--sig-c); }
+  .mk.h { background: transparent; border: 2px solid var(--sig-r); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; padding: 2px; }
+  .btn {
+    font-family: var(--mono); font-size: .82rem; letter-spacing: .04em;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .btn.on .dot { background: var(--sig-in); box-shadow: 0 0 9px var(--sig-in); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+
+  .ctrl { display: flex; flex-direction: column; gap: 7px; min-width: 200px; flex: 1 1 260px; max-width: 400px; }
+  .ctrl .lab { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-moz-range-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+
+  .hide { display: none !important; }
+  button:focus-visible, input:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">MOSFET</span>
+      <div class="barright">
+        <div class="seg" role="group" aria-label="Transistor type">
+          <button id="type-n" aria-pressed="true">NMOS</button>
+          <button id="type-p" aria-pressed="false">PMOS</button>
+        </div>
+        <span class="pill" id="status">Channel off</span>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="Cross-section of a MOSFET: the gate voltage pulls charges up from the body to build a conducting channel between source and drain"></canvas></div>
+
+    <div class="legend">
+      <span class="chip"><span class="mk e"></span>free electron (−)</span>
+      <span class="chip"><span class="mk h"></span>hole (+)</span>
+      <span class="chip"><span class="mk" id="ion-mk" style="width:11px;height:11px">–</span>fixed dopant ion</span>
+    </div>
+
+    <div class="deck">
+      <div class="ctrl">
+        <div class="lab"><span id="gl-lo">low −</span><span>gate voltage</span><span id="gl-hi">+ high</span></div>
+        <input type="range" id="gate-slider" min="-1" max="1" step="0.001" value="0" aria-label="Gate voltage">
+      </div>
+
+      <button class="btn" id="drain-btn"><span class="dot"></span><span id="drain-label">Apply drain voltage</span></button>
+      <button class="btn primary" id="play-btn">Pause</button>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const motionScale = reduceMotion ? 0.4 : 1;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), sc: g("--sig-c"), sr: g("--sig-r"),
+      accent: g("--accent"), aink: g("--accent-ink"), ok: g("--ok"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const vth = 0.42, maxCh = 30;
+  const S = { type: "nmos", vg: 0, drainOn: false, running: true, t: 0 };
+
+  // device wiring. drive>0 means the gate is pushing this device toward ON.
+  const nmos = () => S.type === "nmos";
+  const drive = () => nmos() ? S.vg : -S.vg;              // NMOS on when gate high, PMOS on when gate low
+  const chKind = () => nmos() ? "e" : "h";                // channel + source/drain carrier
+  const bodyKind = () => nmos() ? "h" : "e";              // majority carrier in the body
+  const chCol = () => (chKind() === "e" ? C.sc : C.sr);
+  const bodyCol = () => (bodyKind() === "e" ? C.sc : C.sr);
+  const depDepth = () => clamp(drive(), 0, vth) / vth * g.maxDep;
+  const strength = () => clamp((drive() - vth) / (1 - vth), 0, 1);
+  const conducting = () => strength() > 0.02 && S.drainOn;
+
+  const srcC = [], drnC = [], bodyC = [], chC = [], ions = [], jions = [];
+
+  // ---- geometry ----
+  const cv = $("scene");
+  let ctx, W, H, DPR, g = {};
+
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const surf = H * 0.36, bot = H * 0.9;
+    const nDepth = surf + (bot - surf) * 0.42;
+    const jw = clamp((nDepth - surf) * 0.14, 9, 15);
+    g = {
+      bodyX0: W * 0.1, bodyX1: W * 0.9, surf, bot,
+      srcX0: W * 0.13, srcX1: W * 0.35, drnX0: W * 0.65, drnX1: W * 0.87,
+      nDepth, jw, openMax: 34,
+      oxT: 8, gateT: 16, topY: H * 0.07,
+      maxDep: (bot - surf) * 0.34, dotR: clamp(W * 0.009, 5, 7),
+    };
+    seed();
+  }
+
+  function seedInRect(arr, n, x0, x1, y0, y1) {
+    arr.length = 0;
+    for (let i = 0; i < n; i++) arr.push({ x: rand(x0, x1), y: rand(y0, y1), vx: rand(-1, 1), vy: rand(-1, 1) });
+  }
+  function seed() {
+    const jw = g.jw;
+    // mobile carriers stay jw back from each junction — the pulled-back margin IS the depletion layer
+    seedInRect(srcC, 14, g.srcX0 + jw, g.srcX1 - jw, g.surf + 5, g.nDepth - jw);
+    seedInRect(drnC, 14, g.drnX0 + jw, g.drnX1 - jw, g.surf + 5, g.nDepth - jw);
+    seedInRect(bodyC, 44, g.bodyX0 + 8, g.bodyX1 - 8, g.surf + jw, g.bot - 8);
+    chC.length = 0;
+    ions.length = 0;
+    const stepx = (g.bodyX1 - g.bodyX0) / 7, stepy = (g.bot - g.surf) / 4;
+    for (let x = g.bodyX0 + stepx * 0.5; x < g.bodyX1; x += stepx)
+      for (let y = g.surf + stepy * 0.5; y < g.bot; y += stepy) {
+        const inSrc = x > g.srcX0 - jw && x < g.srcX1 + jw && y < g.nDepth + jw;
+        const inDrn = x > g.drnX0 - jw && x < g.drnX1 + jw && y < g.nDepth + jw;
+        if (inSrc || inDrn) continue;
+        ions.push({ x: x + rand(-5, 5), y: y + rand(-5, 5) });
+      }
+    buildJions();
+  }
+
+  // fixed charges straddling every n+/p (or p+/n) junction — the built-in depletion barrier
+  function buildJions() {
+    jions.length = 0;
+    const half = g.jw * 0.5;
+    const blockSign = nmos() ? "+" : "–", bodySign = nmos() ? "–" : "+";
+    const col = (edge, blockLeft, inner) => {
+      for (let i = 0; i < 4; i++) {
+        const y = lerp(g.surf + 8, g.nDepth - 6, i / 3);
+        jions.push({ x: edge + (blockLeft ? -half : half), y, sign: blockSign, inner });
+        jions.push({ x: edge + (blockLeft ? half : -half), y, sign: bodySign, inner });
+      }
+    };
+    const row = (x0, x1) => {
+      for (let i = 0; i < 4; i++) {
+        const x = lerp(x0 + 8, x1 - 8, i / 3);
+        jions.push({ x, y: g.nDepth - half, sign: blockSign, inner: false });
+        jions.push({ x, y: g.nDepth + half, sign: bodySign, inner: false });
+      }
+    };
+    col(g.srcX1, true, true);      // source inner edge (faces the channel gap)
+    col(g.drnX0, false, true);     // drain inner edge
+    col(g.srcX0, false, false);    // source outer edge
+    col(g.drnX1, true, false);     // drain outer edge
+    row(g.srcX0, g.srcX1);         // source bottom
+    row(g.drnX0, g.drnX1);         // drain bottom
+  }
+
+  // holes may only rise to the surface in the middle of the gap; junction margins stay clear
+  function holeTop(x) {
+    if (x > g.srcX1 + g.jw && x < g.drnX0 - g.jw) return g.surf + depDepth();
+    return g.nDepth + g.jw;
+  }
+
+  const inGap = (x) => x > g.srcX1 && x < g.drnX0;
+  const band = (str) => { const top = g.surf + 3, thick = 6 + str * 22; return { top, bot: top + thick }; };
+
+  function move(p, x0, x1, y0, y1, vmax, dt) {
+    const jit = 700 * motionScale;
+    p.vx += rand(-jit, jit) * dt; p.vy += rand(-jit, jit) * dt;
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    if (sp > vmax) { p.vx *= vmax / sp; p.vy *= vmax / sp; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.x < x0) { p.x = x0; p.vx = Math.abs(p.vx); }
+    if (p.x > x1) { p.x = x1; p.vx = -Math.abs(p.vx); }
+    if (p.y < y0) { p.y = y0; p.vy = Math.abs(p.vy); }
+    if (p.y > y1) { p.y = y1; p.vy = -Math.abs(p.vy); }
+  }
+
+  function step(dt) {
+    if (!S.running) return;
+    dt = Math.min(dt, 0.05); S.t += dt;
+    const ev = 34 * motionScale, jw = g.jw;
+    srcC.forEach((p) => move(p, g.srcX0 + jw, g.srcX1 - jw, g.surf + 5, g.nDepth - jw, ev, dt));
+    drnC.forEach((p) => move(p, g.drnX0 + jw, g.drnX1 - jw, g.surf + 5, g.nDepth - jw, ev, dt));
+
+    // the gate's field repels the body's majority carriers: they stream down out of the region
+    // beneath the gate, so that surface layer stops behaving like ordinary p-type (n-type) — it inverts
+    const dr = drive();
+    bodyC.forEach((p) => {
+      const top = holeTop(p.x);
+      if (inGap(p.x) && dr > 0.02 && p.y < top + 26) p.y += 55 * motionScale * dr * dt;
+      if (p.y < top) { p.y = top; p.vy = Math.abs(p.vy); }
+      move(p, g.bodyX0 + 6, g.bodyX1 - 6, top, g.bot - 6, 30 * motionScale, dt);
+    });
+
+    updateChannel(dt);
+  }
+
+  // channel carriers leak in SIDEWAYS from the n+/p+ source & drain, filling a band that thickens with gate voltage
+  function updateChannel(dt) {
+    const str = strength(), b = band(str), cond = conducting();
+    const mid = (g.srcX1 + g.drnX0) / 2;
+    const target = Math.round(str * maxCh);
+    let active = 0;
+    for (const p of chC) if (p.state !== "exit") active++;
+    while (active < target) {
+      const fromSrc = cond ? true : Math.random() < 0.5;   // in current, they enter from the source side
+      chC.push({ x: fromSrc ? g.srcX1 - 2 : g.drnX0 + 2, y: rand(b.top, b.bot),
+        tx: rand(g.srcX1 + 5, g.drnX0 - 5), ty: rand(b.top, b.bot), state: "enter" });
+      active++;
+    }
+    if (active > target) {
+      let excess = active - target;
+      for (const p of chC) {
+        if (excess <= 0) break;
+        if (p.state === "in") { p.state = "exit"; p.tx = p.x < mid ? g.srcX1 - 4 : g.drnX0 + 4; excess--; }
+      }
+    }
+    const enterE = 1 - Math.pow(0.03, dt), exitE = 1 - Math.pow(0.04, dt);
+    const drift = cond ? 118 * motionScale * (0.4 + 0.6 * str) : 0;
+    for (let i = chC.length - 1; i >= 0; i--) {
+      const p = chC[i];
+      if (p.state === "enter") {
+        p.x += (p.tx - p.x) * enterE; p.y += (clamp(p.ty, b.top, b.bot) - p.y) * 0.25;
+        if (Math.abs(p.x - p.tx) < 4) p.state = "in";
+      } else if (p.state === "in") {
+        p.y += (clamp(p.ty, b.top, b.bot) - p.y) * 0.2;
+        p.x += drift * dt + rand(-12, 12) * motionScale * dt;
+        if (p.x > g.drnX0 + 5) p.x = g.srcX1 - 5;
+        if (p.x < g.srcX1 - 6) p.x = g.drnX0 + 4;
+      } else {
+        p.x += (p.tx - p.x) * exitE;
+        if (Math.abs(p.x - p.tx) < 4) chC.splice(i, 1);
+      }
+    }
+  }
+
+  // ---- drawing ----
+  // sprites carry their charge sign: electron = filled circle with –, hole = ring with +
+  const dotE = (x, y, r, glow) => {
+    ctx.save(); if (glow) { ctx.shadowColor = C.sc; ctx.shadowBlur = 10; }
+    ctx.fillStyle = C.sc; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore();
+    ctx.fillStyle = C.aink; ctx.fillText("–", x, y);
+  };
+  const ringH = (x, y, r) => {
+    ctx.strokeStyle = C.sr; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+    ctx.fillStyle = C.sr; ctx.fillText("+", x, y);
+  };
+  const carrier = (p, kind, glow) => { if (kind === "e") dotE(p.x, p.y, g.dotR, glow); else ringH(p.x, p.y, g.dotR); };
+  const tintRect = (x, y, w, h, col, a) => { ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = col; ctx.fillRect(x, y, w, h); ctx.restore(); };
+  const label = (txt, x, y, col, size, align) => {
+    ctx.fillStyle = col; ctx.font = "600 " + (size || 11) + "px " + mono;
+    ctx.textAlign = align || "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+  };
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const { bodyX0, bodyX1, surf, bot, srcX0, srcX1, drnX0, drnX1, nDepth } = g;
+    const dep = depDepth(), str = strength(), cond = conducting(), b = band(str);
+    const ck = chKind(), bk = bodyKind();
+
+    // body + n+/p+ source & drain blocks
+    tintRect(bodyX0, surf, bodyX1 - bodyX0, bot - surf, bodyCol(), 0.08);
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1.4; ctx.strokeRect(bodyX0, surf, bodyX1 - bodyX0, bot - surf);
+    [ [srcX0, srcX1], [drnX0, drnX1] ].forEach(([a, bx]) => {
+      tintRect(a, surf, bx - a, nDepth - surf, chCol(), 0.12);
+      ctx.strokeStyle = chCol(); ctx.globalAlpha = 0.4; ctx.lineWidth = 1.2; ctx.strokeRect(a, surf, bx - a, nDepth - surf); ctx.globalAlpha = 1;
+    });
+    const sdTag = nmos() ? "n⁺" : "p⁺";
+    label(sdTag, (srcX0 + srcX1) / 2, nDepth - 14, chCol(), 12);
+    label(sdTag, (drnX0 + drnX1) / 2, nDepth - 14, chCol(), 12);
+    label(nmos() ? "p-type body" : "n-type body", (bodyX0 + bodyX1) / 2, bot - 16, C.muted, 11);
+
+    // depletion band under the gate
+    if (dep > 1) {
+      tintRect(srcX1, surf, drnX0 - srcX1, dep, C.panel2, 0.5);
+      ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.3; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(srcX1, surf + dep); ctx.lineTo(drnX0, surf + dep); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+
+    // fixed dopant ions (brighter where depletion has stripped the mobile carriers away)
+    const ionSign = nmos() ? "–" : "+";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px " + mono;
+    ions.forEach((p) => {
+      const exposed = inGap(p.x) && p.y < surf + dep;
+      ctx.globalAlpha = exposed ? 0.85 : 0.22; ctx.fillStyle = C.muted;
+      ctx.fillText(ionSign, p.x, p.y);
+    });
+    ctx.globalAlpha = 1;
+
+    drawJunctions(str);
+
+    // carriers (font/alignment set once here for the +/– glyphs inside each sprite)
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "700 " + Math.round(g.dotR * 1.4) + "px " + mono;
+    bodyC.forEach((p) => carrier(p, bk, false));
+    srcC.forEach((p) => carrier(p, ck, false));
+    drnC.forEach((p) => carrier(p, ck, false));
+
+    // the channel band — thickens as the gate opens, holding more current
+    if (str > 0.02) tintRect(srcX1, b.top - 1, drnX0 - srcX1, b.bot - b.top + 2, chCol(), 0.1 + 0.22 * str);
+    chC.forEach((p) => carrier(p, ck, ck === "e"));
+
+    drawGateStack();
+    drawTerminals(cond);
+    if (cond) drawFlow(str);
+  }
+
+  // built-in junction depletion. The inner edges (facing the gap) recede from the top as the
+  // inversion layer forms — that is the barrier being erased so source, channel and drain connect.
+  function drawJunctions(str) {
+    const jw = g.jw, innerTop = g.surf + str * g.openMax;
+    const wash = (x, y, w, h) => { if (h > 0) tintRect(x, y, w, h, C.panel2, 0.55); };
+    wash(g.srcX1 - jw, innerTop, 2 * jw, g.nDepth - innerTop);
+    wash(g.drnX0 - jw, innerTop, 2 * jw, g.nDepth - innerTop);
+    wash(g.srcX0 - jw, g.surf, 2 * jw, g.nDepth - g.surf);
+    wash(g.drnX1 - jw, g.surf, 2 * jw, g.nDepth - g.surf);
+    wash(g.srcX0 - jw, g.nDepth - jw, g.srcX1 - g.srcX0 + 2 * jw, 2 * jw);
+    wash(g.drnX0 - jw, g.nDepth - jw, g.drnX1 - g.drnX0 + 2 * jw, 2 * jw);
+
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px " + mono;
+    ctx.fillStyle = C.muted;
+    jions.forEach((p) => {
+      if (p.inner && p.y < innerTop) return;   // the channel has swallowed this part of the barrier
+      ctx.globalAlpha = 0.85; ctx.fillText(p.sign, p.x, p.y);
+    });
+    ctx.globalAlpha = 0.6; label("depletion", (g.srcX0 + g.srcX1) / 2, g.nDepth + jw + 10, C.muted, 9);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawGateStack() {
+    const { srcX1, drnX0, surf, oxT, gateT, topY } = g;
+    const gx0 = srcX1 - 6, gx1 = drnX0 + 6, gw = gx1 - gx0, oy = surf - oxT, gy = oy - gateT;
+    const energ = clamp(drive(), 0, 1);
+
+    // oxide — the insulator no charge ever crosses
+    tintRect(srcX1, oy, drnX0 - srcX1, oxT, C.sin, 0.16);
+    ctx.strokeStyle = C.sin; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.strokeRect(srcX1, oy, drnX0 - srcX1, oxT); ctx.globalAlpha = 1;
+    label("oxide", (srcX1 + drnX0) / 2, oy + oxT / 2, C.sin, 8);
+
+    // gate metal, energising with the drive
+    tintRect(gx0, gy, gw, gateT, C.accent, 0.13 + 0.6 * energ);
+    ctx.strokeStyle = energ > 0.02 ? C.accent : C.muted; ctx.lineWidth = 1.6; ctx.strokeRect(gx0, gy, gw, gateT);
+    const gcx = (gx0 + gx1) / 2;
+    ctx.strokeStyle = energ > 0.02 ? C.accent : C.muted; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(gcx, gy); ctx.lineTo(gcx, topY); ctx.stroke();
+    label("G", gcx, topY - 9, energ > 0.02 ? C.accent : C.muted, 12);
+
+    if (energ > 0.03) {
+      // gate charge: like charges to the body's majority carrier, so it repels them (→ depletion)
+      const sign = nmos() ? "+" : "–", nq = Math.round(2 + energ * 6);
+      ctx.fillStyle = C.accent; ctx.font = "700 12px " + mono; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (let i = 0; i < nq; i++) ctx.fillText(sign, lerp(gx0 + 10, gx1 - 10, nq === 1 ? 0.5 : i / (nq - 1)), gy + gateT - 5);
+    }
+  }
+
+  function drawTerminals(cond) {
+    const { srcX0, srcX1, drnX0, drnX1, surf, topY } = g;
+    const scx = (srcX0 + srcX1) / 2, dcx = (drnX0 + drnX1) / 2;
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(scx, surf); ctx.lineTo(scx, topY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dcx, surf); ctx.lineTo(dcx, topY); ctx.stroke();
+    // ground reference: NMOS source, PMOS drain
+    const gnd = nmos() ? scx : dcx, hot = nmos() ? dcx : scx;
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(gnd - 9, topY); ctx.lineTo(gnd + 9, topY);
+    ctx.moveTo(gnd - 6, topY + 4); ctx.lineTo(gnd + 6, topY + 4);
+    ctx.moveTo(gnd - 3, topY + 8); ctx.lineTo(gnd + 3, topY + 8); ctx.stroke();
+    label("S", scx, topY - 9, C.muted, 12);
+    label("D", dcx, topY - 9, C.muted, 12);
+    if (S.drainOn) label("+V", hot + 16, topY + 2, C.sin, 12, "left");
+  }
+
+  function drawFlow(str) {
+    const y = band(str).bot + 12, x0 = g.srcX1 + 10, x1 = g.drnX0 - 10;
+    const a = 0.55 + 0.35 * Math.sin(S.t * 5);
+    ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = C.ok; ctx.fillStyle = C.ok; ctx.lineWidth = 2 + str * 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1 - 6, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x1 - 9, y - 5); ctx.lineTo(x1 - 9, y + 5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    label(nmos() ? "electron flow" : "hole flow", (x0 + x1) / 2, y + 12, C.ok, 9);
+  }
+
+  function updateStatus() {
+    const str = strength(), el = $("status");
+    if (str <= 0.02) { el.textContent = drive() > 0.05 ? "Depleting — no channel" : "Channel off"; el.classList.remove("on"); }
+    else if (!S.drainOn) { el.textContent = "Channel open"; el.classList.add("on"); }
+    else { el.textContent = "Conducting →"; el.classList.add("on"); }
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
+
+  // ---- controls ----
+  function setType(t) {
+    S.type = t;
+    $("type-n").setAttribute("aria-pressed", t === "nmos");
+    $("type-p").setAttribute("aria-pressed", t === "pmos");
+    $("ion-mk").textContent = t === "nmos" ? "–" : "+";
+    $("gl-lo").textContent = t === "nmos" ? "low (off)" : "low (on)";
+    $("gl-hi").textContent = t === "nmos" ? "high (on)" : "high (off)";
+    seed();
+  }
+  $("type-n").onclick = () => setType("nmos");
+  $("type-p").onclick = () => setType("pmos");
+  $("gate-slider").oninput = (e) => { S.vg = parseFloat(e.target.value); };
+  $("drain-btn").onclick = () => {
+    S.drainOn = !S.drainOn;
+    $("drain-btn").classList.toggle("on", S.drainOn);
+    $("drain-label").textContent = S.drainOn ? "Drain voltage on" : "Apply drain voltage";
+  };
+  $("play-btn").onclick = () => { S.running = !S.running; $("play-btn").textContent = S.running ? "Pause" : "Play"; last = performance.now(); };
+  $("reset-btn").onclick = () => {
+    S.vg = 0; S.drainOn = false; $("gate-slider").value = 0;
+    $("drain-btn").classList.remove("on"); $("drain-label").textContent = "Apply drain voltage";
+    S.running = true; $("play-btn").textContent = "Pause"; last = performance.now();
+    seed();
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); setType("nmos"); requestAnimationFrame(frame);
+})();
+</script>

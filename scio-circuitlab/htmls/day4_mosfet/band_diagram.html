@@ -1,0 +1,390 @@
+<title>Band Filling &amp; the Fermi Level</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    min-height: 100vh; padding: clamp(14px, 2.4vw, 34px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .shell { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; gap: 3px; }
+  .seg button {
+    font-family: var(--mono); font-size: .78rem; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); background: transparent; border: 0; padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .stage {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: clamp(380px, 58vw, 540px); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--mono); font-size: .72rem; color: var(--muted); padding: 0 2px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; }
+  .chip b { color: var(--ink); font-weight: 600; min-width: 1ch; }
+  .mk { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
+  .mk.e { background: var(--sig-c); box-shadow: 0 0 7px var(--sig-c); }
+  .mk.slot { background: transparent; border: 1.5px solid var(--muted); opacity: .5; }
+  .mk.f { width: 16px; height: 0; border: 0; border-top: 2px dashed var(--sig-in); border-radius: 0; }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; padding: 2px; }
+  .btn {
+    font-family: var(--mono); font-size: .82rem; letter-spacing: .04em;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .btn.add { border-color: var(--sig-c); color: var(--ink); }
+  .btn.add:hover { background: var(--sig-c); color: var(--accent-ink); }
+
+  .ctrl { display: flex; flex-direction: column; gap: 7px; min-width: 150px; flex: 1 1 170px; max-width: 300px; }
+  .ctrl .lab { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-moz-range-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+
+  .hide { display: none !important; }
+  button:focus-visible, input:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">Band diagram</span>
+      <div class="seg" role="group" aria-label="Material preset">
+        <button id="pre-metal" aria-pressed="false">Metal</button>
+        <button id="pre-semi" aria-pressed="true">Semiconductor</button>
+        <button id="pre-ins" aria-pressed="false">Insulator</button>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="Energy band diagram: empty states in two bands that you fill with electrons from the bottom up; the Fermi level marks the topmost electron"></canvas></div>
+
+    <div class="legend">
+      <span class="chip"><span class="mk e"></span>electron</span>
+      <span class="chip"><span class="mk slot"></span>empty state</span>
+      <span class="chip"><span class="mk f"></span>Fermi level = energy of the top electron</span>
+      <span class="chip">electrons placed <b id="cnt-n">0</b></span>
+      <span class="chip">reached conduction band <b id="cnt-e">0</b></span>
+      <span class="chip">T <b id="cnt-t">0 K</b></span>
+    </div>
+
+    <div class="deck">
+      <button class="btn" id="minus-btn">− electron</button>
+      <button class="btn add" id="plus-btn">+ electron</button>
+
+      <div class="ctrl">
+        <div class="lab"><span>none</span><span>electrons</span><span>full</span></div>
+        <input type="range" id="fill-slider" min="0" max="96" step="1" value="0" aria-label="Number of electrons">
+      </div>
+      <div class="ctrl">
+        <div class="lab"><span>0 K</span><span>temperature</span><span>hot</span></div>
+        <input type="range" id="temp-slider" min="0" max="1" step="0.001" value="0" aria-label="Temperature">
+      </div>
+      <div class="ctrl">
+        <div class="lab"><span>overlap</span><span>band gap</span><span>wide</span></div>
+        <input type="range" id="gap-slider" min="-0.7" max="1.5" step="0.01" value="0.35" aria-label="Band gap">
+      </div>
+
+      <button class="btn primary" id="play-btn">Pause</button>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const motionScale = reduceMotion ? 0.4 : 1;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), sc: g("--sig-c"), sr: g("--sig-r"),
+      accent: g("--accent"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const rows = 8, cols = 6;             // states per band
+  const eMin = 0, eMax = 3.5, kTmax = 0.11;
+
+  // seats: one per allowed state. energy = band bottom (+live gap) + row height; x = column.
+  const hash = (i) => { const s = Math.sin(i * 127.1 + 4.3) * 43758.5453; return s - Math.floor(s); };
+  const seats = [];
+  (() => {
+    let idx = 0;
+    for (const band of ["v", "c"])
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          seats.push({ band, r, c, thr: 0.05 + 0.9 * hash(idx), rank: 0, drop: null, idx: idx++ });
+  })();
+  const maxSeats = seats.length;
+
+  const S = { gap: 0.35, temp: 0, running: true, t: 0, n: 0, ef: eMin - 1 };
+  let order = seats.map((_, i) => i);   // seat indices, lowest energy first
+
+  const energyOf = (s) => (s.band === "v" ? 0 : 1 + S.gap) + (s.r + 0.5) / rows;
+
+  function rankSeats() {
+    order = seats.map((_, i) => i).sort((a, b) => energyOf(seats[a]) - energyOf(seats[b]) || a - b);
+    order.forEach((si, k) => { seats[si].rank = k; });
+  }
+  function computeEf() {
+    if (S.n <= 0) { S.ef = eMin - 1; return; }
+    const eLast = energyOf(seats[order[S.n - 1]]);
+    const eNext = S.n < maxSeats ? energyOf(seats[order[S.n]]) : eMax + 1;
+    S.ef = (eLast + eNext) / 2;   // halfway between the top electron and the next empty slot
+  }
+  const fermi = (e) => {
+    const kT = S.temp * kTmax;
+    if (kT < 1e-6) return e < S.ef ? 1 : 0;   // 0 K → perfectly sharp fill
+    return 1 / (1 + Math.exp((e - S.ef) / kT));
+  };
+
+  // ---- canvas / layout ----
+  const cv = $("scene");
+  let ctx, W, H, DPR;
+  let axisX, vColL, cColL, colW, yTop, yBot, dotR;
+
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    axisX = W * 0.12; colW = W * 0.26; vColL = W * 0.22; cColL = W * 0.54;
+    yTop = H * 0.1; yBot = H * 0.9;
+    const rowPx = ((yBot - yTop) / (eMax - eMin)) / rows;
+    dotR = clamp(Math.min(rowPx * 0.34, (colW / cols) * 0.3), 3.2, 6);
+  }
+
+  const yOf = (e) => yBot + (e - eMin) / (eMax - eMin) * (yTop - yBot);
+  const xOf = (s) => (s.band === "v" ? vColL : cColL) + (s.c + 0.5) / cols * colW;
+
+  function step(dt) {
+    if (!S.running) return;
+    dt = Math.min(dt, 0.05);
+    S.t += dt;
+    for (const s of seats) if (s.drop != null) { s.drop += dt / 0.34; if (s.drop >= 1) s.drop = null; }
+  }
+
+  // ---- drawing ----
+  function bandRect(bottomE, topE, left, label) {
+    const yt = yOf(topE), yb = yOf(bottomE);
+    ctx.fillStyle = C.panel2; ctx.globalAlpha = 0.6;
+    ctx.fillRect(left, yt, colW, yb - yt); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1.4; ctx.strokeRect(left, yt, colW, yb - yt);
+    ctx.fillStyle = C.muted; ctx.font = "600 11px " + mono;
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillText(label, left + colW / 2, yt - 6);
+  }
+
+  function drawAxis() {
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(axisX, yBot); ctx.lineTo(axisX, yTop); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(axisX, yTop); ctx.lineTo(axisX - 5, yTop + 10); ctx.moveTo(axisX, yTop); ctx.lineTo(axisX + 5, yTop + 10);
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(axisX - 16, (yTop + yBot) / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = C.muted; ctx.font = "600 11px " + mono;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("ENERGY →", 0, 0);
+    ctx.restore();
+  }
+
+  function drawGap() {
+    if (S.gap <= 0.02) return;   // overlapping / touching → no forbidden zone
+    const yt = yOf(1 + S.gap), yb = yOf(1);
+    ctx.fillStyle = C.muted; ctx.globalAlpha = 0.05;
+    ctx.fillRect(vColL, yt, cColL + colW - vColL, yb - yt); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.35; ctx.setLineDash([4, 5]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(vColL, yt); ctx.lineTo(cColL + colW, yt);
+    ctx.moveTo(vColL, yb); ctx.lineTo(cColL + colW, yb); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    if (yb - yt > 22) {
+      ctx.fillStyle = C.muted; ctx.font = "600 10px " + mono;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("BAND GAP — no states", (vColL + cColL + colW) / 2, (yt + yb) / 2);
+    }
+  }
+
+  function drawSmear() {
+    const kT = S.temp * kTmax;
+    if (kT < 1e-4 || S.n <= 0) return;
+    const yLo = yOf(S.ef + 2.2 * kT), yHi = yOf(S.ef - 2.2 * kT);
+    const grad = ctx.createLinearGradient(0, yLo, 0, yHi);
+    grad.addColorStop(0, "transparent"); grad.addColorStop(0.5, C.sin); grad.addColorStop(1, "transparent");
+    ctx.save(); ctx.globalAlpha = 0.12; ctx.fillStyle = grad;
+    ctx.fillRect(axisX, yLo, cColL + colW + 40 - axisX, yHi - yLo); ctx.restore();
+  }
+
+  function drawFermi() {
+    if (S.n <= 0) return;
+    const y = yOf(S.ef);
+    ctx.strokeStyle = C.sin; ctx.lineWidth = 2; ctx.setLineDash([7, 5]);
+    ctx.beginPath(); ctx.moveTo(axisX, y); ctx.lineTo(cColL + colW + 8, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.sin; ctx.font = "600 12px " + mono;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText("Fermi level", cColL + colW + 14, y);
+  }
+
+  function drawSeats() {
+    const amp = S.temp * 2 * motionScale;   // frozen still at 0 K
+    const topRank = S.n - 1;
+    for (const s of seats) {
+      const e = energyOf(s), x = xOf(s), baseY = yOf(e);
+      // faint empty slot so every available state is visible, even before filling
+      ctx.globalAlpha = 0.28; ctx.strokeStyle = C.muted; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.arc(x, baseY, dotR, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      const filled = s.rank < S.n;
+      let alpha = fermi(e);
+      if (S.temp * kTmax < 1e-6) alpha = filled ? 1 : 0;
+      let y = baseY + amp * Math.cos(S.t * 3.7 + s.idx * 1.3);
+      const jx = amp * Math.sin(S.t * 3 + s.idx);
+      if (s.drop != null) { y = lerp(yTop - 26, baseY, easeOut(s.drop)); alpha = 1; }
+      if (alpha <= 0.03) continue;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (e > S.ef || s.drop != null) { ctx.shadowColor = C.sc; ctx.shadowBlur = 10; }
+      ctx.fillStyle = C.sc;
+      ctx.beginPath(); ctx.arc(x + jx, y, dotR, 0, 7); ctx.fill();
+      ctx.restore();
+
+      if (s.rank === topRank && s.drop == null) {   // mark the topmost electron — its energy is E_F
+        ctx.globalAlpha = alpha; ctx.strokeStyle = C.sin; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(x + jx, y, dotR + 3, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    drawAxis();
+    bandRect(0, 1, vColL, "valence band");
+    bandRect(1 + S.gap, 2 + S.gap, cColL, "conduction band");
+    drawGap();
+    drawSmear();
+    drawSeats();
+    drawFermi();
+    updateReadout();
+  }
+
+  function updateReadout() {
+    let ce = 0;
+    for (const s of seats) if (s.band === "c") ce += fermi(energyOf(s));
+    $("cnt-n").textContent = S.n;
+    $("cnt-e").textContent = Math.round(ce);
+    $("cnt-t").textContent = S.temp < 1e-4 ? "0 K" : S.temp < 0.45 ? "warm" : "hot";
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); requestAnimationFrame(frame); }
+
+  // ---- electron filling ----
+  function syncFillUi() {
+    $("fill-slider").value = S.n;
+    $("minus-btn").disabled = S.n <= 0;
+    $("plus-btn").disabled = S.n >= maxSeats;
+  }
+  function addElectron() {
+    if (S.n >= maxSeats) return;
+    S.n++; computeEf();
+    if (!reduceMotion) seats[order[S.n - 1]].drop = 0;
+    syncFillUi();
+  }
+  function removeElectron() {
+    if (S.n <= 0) return;
+    seats[order[S.n - 1]].drop = null; S.n--; computeEf(); syncFillUi();
+  }
+  function setCount(n) {
+    S.n = clamp(Math.round(n), 0, maxSeats);
+    for (const s of seats) s.drop = null;
+    computeEf(); syncFillUi();
+  }
+
+  // ---- gap presets ----
+  function regimeFromGap() { return S.gap <= 0.05 ? "metal" : S.gap <= 0.7 ? "semi" : "ins"; }
+  function syncPreset() {
+    const r = regimeFromGap();
+    $("pre-metal").setAttribute("aria-pressed", r === "metal");
+    $("pre-semi").setAttribute("aria-pressed", r === "semi");
+    $("pre-ins").setAttribute("aria-pressed", r === "ins");
+  }
+  function setGap(g) {
+    S.gap = g; $("gap-slider").value = g;
+    rankSeats(); computeEf(); syncPreset();
+  }
+
+  $("plus-btn").onclick = addElectron;
+  $("minus-btn").onclick = removeElectron;
+  $("fill-slider").oninput = (e) => setCount(parseFloat(e.target.value));
+  $("pre-metal").onclick = () => setGap(-0.5);
+  $("pre-semi").onclick = () => setGap(0.35);
+  $("pre-ins").onclick = () => setGap(1.1);
+  $("gap-slider").oninput = (e) => setGap(parseFloat(e.target.value));
+  $("temp-slider").oninput = (e) => { S.temp = parseFloat(e.target.value); };
+  $("play-btn").onclick = () => { S.running = !S.running; $("play-btn").textContent = S.running ? "Pause" : "Play"; last = performance.now(); };
+  $("reset-btn").onclick = () => {
+    S.temp = 0; $("temp-slider").value = 0;
+    setGap(0.35); setCount(0);
+    S.running = true; $("play-btn").textContent = "Pause"; last = performance.now();
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); rankSeats(); computeEf(); syncPreset(); syncFillUi(); requestAnimationFrame(frame);
+})();
+</script>

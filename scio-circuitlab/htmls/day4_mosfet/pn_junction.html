@@ -1,0 +1,370 @@
+<title>PN Junction — depletion &amp; bias</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --ok: #1f9d57;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c; --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff; --ok: #1f9d57;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; padding: clamp(14px, 2.4vw, 34px); -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  .pill { font-family: var(--mono); font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--panel-2); }
+  .pill.on { color: var(--accent-ink); background: var(--ok); border-color: transparent; }
+
+  .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  canvas { display: block; width: 100%; height: clamp(380px, 58vw, 520px); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--mono); font-size: .72rem; color: var(--muted); padding: 0 2px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; }
+  .mk { width: 13px; height: 13px; border-radius: 50%; display: inline-block; text-align: center; }
+  .mk.e { background: var(--sig-c); box-shadow: 0 0 7px var(--sig-c); }
+  .mk.h { background: transparent; border: 2px solid var(--sig-r); }
+  .mk.rec { background: var(--sig-in); box-shadow: 0 0 8px var(--sig-in); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; padding: 2px; }
+  .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 9px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+
+  .ctrl { display: flex; flex-direction: column; gap: 7px; min-width: 220px; flex: 1 1 300px; max-width: 460px; }
+  .ctrl .lab { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-moz-range-track { height: 4px; border-radius: 3px; background: var(--border); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">PN junction / diode</span>
+      <span class="pill" id="status">Equilibrium</span>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="A p-type region meeting an n-type region: carriers recombine at the junction leaving fixed ions, forming a depletion region that widens or narrows with applied voltage"></canvas></div>
+
+    <div class="legend">
+      <span class="chip"><span class="mk e"></span>electron (−)</span>
+      <span class="chip"><span class="mk h"></span>hole (+)</span>
+      <span class="chip"><span class="mk" style="width:11px;height:11px">±</span>fixed dopant ion</span>
+      <span class="chip"><span class="mk rec"></span>recombination</span>
+    </div>
+
+    <div class="deck">
+      <div class="ctrl">
+        <div class="lab"><span>reverse</span><span>applied voltage</span><span>forward</span></div>
+        <input type="range" id="bias-slider" min="-1" max="1" step="0.001" value="0" aria-label="Applied bias voltage">
+      </div>
+      <button class="btn" id="form-btn">Rejoin the two sides ↺</button>
+      <button class="btn primary" id="play-btn">Pause</button>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const motionScale = reduceMotion ? 0.4 : 1;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), sc: g("--sig-c"), sr: g("--sig-r"),
+      accent: g("--accent"), aink: g("--accent-ink"), ok: g("--ok"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const S = { bias: 0, running: true, t: 0, wdep: 0, forming: true, recAcc: 0, crossAcc: 0 };
+
+  const pHoles = [], nElectrons = [], pIons = [], nIons = [], crossers = [], flashes = [];
+
+  const cv = $("scene");
+  let ctx, W, H, DPR, g = {};
+
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const pLeft = W * 0.09, nRight = W * 0.91;
+    g = {
+      pLeft, nRight, xj: (pLeft + nRight) / 2,
+      barY0: H * 0.3, barY1: H * 0.78, topY: H * 0.1,
+      W0: (nRight - pLeft) * 0.15, dotR: clamp(W * 0.009, 5, 7),
+      pLeadX: lerp(pLeft, (pLeft + nRight) / 2, 0.3), nLeadX: lerp((pLeft + nRight) / 2, nRight, 0.7),
+    };
+    seed();
+  }
+
+  function seedInRect(arr, n, x0, x1, y0, y1) {
+    arr.length = 0;
+    for (let i = 0; i < n; i++) arr.push({ x: rand(x0, x1), y: rand(y0, y1), vx: rand(-1, 1), vy: rand(-1, 1) });
+  }
+  function seed() {
+    seedInRect(pHoles, 18, g.pLeft + 6, g.xj - 6, g.barY0 + 6, g.barY1 - 6);
+    seedInRect(nElectrons, 18, g.xj + 6, g.nRight - 6, g.barY0 + 6, g.barY1 - 6);
+    crossers.length = 0; flashes.length = 0;
+    buildIons();
+  }
+  function buildIons() {
+    pIons.length = 0; nIons.length = 0;
+    const cols = 6, rows = 4;
+    for (let i = 0; i < cols; i++)
+      for (let j = 0; j < rows; j++) {
+        const y = lerp(g.barY0 + 10, g.barY1 - 10, j / (rows - 1)) + rand(-4, 4);
+        pIons.push({ x: lerp(g.pLeft + 12, g.xj - 8, i / (cols - 1)) + rand(-4, 4), y });
+        nIons.push({ x: lerp(g.xj + 8, g.nRight - 12, i / (cols - 1)) + rand(-4, 4), y: y + rand(-3, 3) });
+      }
+  }
+
+  const wtarget = (b) => g.W0 * clamp(1 - 0.82 * b, 0.08, 1.9);   // forward shrinks it, reverse widens it
+  const curr = (b) => clamp((b - 0.35) / 0.65, 0, 1);            // forward current only past the barrier
+  const inDep = (x) => Math.abs(x - g.xj) < S.wdep / 2;
+
+  function addFlash(x, y) { flashes.push({ x, y, age: 0 }); }
+
+  function move(p, x0, x1, y0, y1, vmax, dt) {
+    const jit = 650 * motionScale;
+    p.vx += rand(-jit, jit) * dt; p.vy += rand(-jit, jit) * dt;
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    if (sp > vmax) { p.vx *= vmax / sp; p.vy *= vmax / sp; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (x1 < x0) x1 = x0;
+    if (p.x < x0) { p.x = x0; p.vx = Math.abs(p.vx); }
+    if (p.x > x1) { p.x = x1; p.vx = -Math.abs(p.vx); }
+    if (p.y < y0) { p.y = y0; p.vy = Math.abs(p.vy); }
+    if (p.y > y1) { p.y = y1; p.vy = -Math.abs(p.vy); }
+  }
+
+  function step(dt) {
+    if (!S.running) return;
+    dt = Math.min(dt, 0.05); S.t += dt;
+
+    // depletion width: forms from zero, then tracks the bias
+    if (S.forming) {
+      S.wdep += (g.W0 - S.wdep) * (1 - Math.pow(0.06, dt));
+      S.recAcc += dt * 16;
+      while (S.recAcc > 1) { S.recAcc -= 1; addFlash(g.xj + rand(-S.wdep / 2 - 6, S.wdep / 2 + 6), rand(g.barY0 + 8, g.barY1 - 8)); }
+      if (S.wdep > g.W0 * 0.98) S.forming = false;
+    } else {
+      S.wdep += (wtarget(S.bias) - S.wdep) * (1 - Math.pow(0.0006, dt));
+    }
+
+    const hv = 30 * motionScale, m = 4;
+    const rp = g.xj - S.wdep / 2 - m, ln = g.xj + S.wdep / 2 + m;
+    pHoles.forEach((p) => move(p, g.pLeft + m, rp, g.barY0 + m, g.barY1 - m, hv, dt));
+    nElectrons.forEach((p) => move(p, ln, g.nRight - m, g.barY0 + m, g.barY1 - m, hv, dt));
+
+    // forward current: carriers cross the thin junction and recombine on the far side
+    const I = S.forming ? 0 : curr(S.bias);
+    if (I > 0) {
+      S.crossAcc += I * 26 * dt;
+      while (S.crossAcc > 1) { S.crossAcc -= 1; spawnCrosser(); }
+    }
+    for (let i = crossers.length - 1; i >= 0; i--) {
+      const p = crossers[i];
+      p.x += p.vx * dt; p.y += rand(-10, 10) * motionScale * dt;
+      if ((p.vx < 0 && p.x <= p.rx) || (p.vx > 0 && p.x >= p.rx)) { addFlash(p.x, p.y); crossers.splice(i, 1); }
+    }
+
+    for (let i = flashes.length - 1; i >= 0; i--) { flashes[i].age += dt; if (flashes[i].age > 0.45) flashes.splice(i, 1); }
+  }
+
+  function spawnCrosser() {
+    const y = rand(g.barY0 + 8, g.barY1 - 8), cs = 120 * motionScale;
+    if (Math.random() < 0.5) crossers.push({ kind: "e", x: g.xj + S.wdep / 2, y, vx: -cs, rx: g.xj - rand(10, g.W0 * 0.55) });
+    else crossers.push({ kind: "h", x: g.xj - S.wdep / 2, y, vx: cs, rx: g.xj + rand(10, g.W0 * 0.55) });
+  }
+
+  // ---- drawing ----
+  const dotE = (x, y, r) => {
+    ctx.save(); ctx.shadowColor = C.sc; ctx.shadowBlur = 9; ctx.fillStyle = C.sc;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore();
+    ctx.fillStyle = C.aink; ctx.fillText("–", x, y);
+  };
+  const ringH = (x, y, r) => {
+    ctx.strokeStyle = C.sr; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+    ctx.fillStyle = C.sr; ctx.fillText("+", x, y);
+  };
+  const tintRect = (x, y, w, h, col, a) => { ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = col; ctx.fillRect(x, y, w, h); ctx.restore(); };
+  const label = (txt, x, y, col, size, align) => {
+    ctx.fillStyle = col; ctx.font = "600 " + (size || 11) + "px " + mono;
+    ctx.textAlign = align || "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+  };
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const { pLeft, nRight, xj, barY0, barY1, dotR } = g;
+    const half = S.wdep / 2;
+
+    // p region (left) and n region (right)
+    tintRect(pLeft, barY0, xj - pLeft, barY1 - barY0, C.sr, 0.08);
+    tintRect(xj, barY0, nRight - xj, barY1 - barY0, C.sc, 0.08);
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1.4; ctx.strokeRect(pLeft, barY0, nRight - pLeft, barY1 - barY0);
+    label("p-type", (pLeft + xj) / 2, barY1 - 14, C.muted, 11);
+    label("n-type", (xj + nRight) / 2, barY1 - 14, C.muted, 11);
+
+    // depletion region: swept clear of mobile carriers, only fixed ions remain
+    if (S.wdep > 2) {
+      tintRect(xj - half, barY0, S.wdep, barY1 - barY0, C.panel2, 0.55);
+      ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.3; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+      ctx.strokeRect(xj - half, barY0, S.wdep, barY1 - barY0); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      label("depletion region — no free charge", xj, barY0 - 12, C.muted, 10);
+    }
+    // metallurgical junction line
+    ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.4; ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xj, barY0); ctx.lineTo(xj, barY1); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    // fixed dopant ions: bright where the depletion has exposed them, faint where carriers still cover them
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px " + mono; ctx.fillStyle = C.muted;
+    pIons.forEach((p) => { ctx.globalAlpha = inDep(p.x) ? 0.9 : 0.2; ctx.fillText("–", p.x, p.y); });
+    nIons.forEach((p) => { ctx.globalAlpha = inDep(p.x) ? 0.9 : 0.2; ctx.fillText("+", p.x, p.y); });
+    ctx.globalAlpha = 1;
+
+    drawField();
+
+    // mobile carriers
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "700 " + Math.round(dotR * 1.4) + "px " + mono;
+    pHoles.forEach((p) => ringH(p.x, p.y, dotR));
+    nElectrons.forEach((p) => dotE(p.x, p.y, dotR));
+    crossers.forEach((p) => (p.kind === "e" ? dotE(p.x, p.y, dotR) : ringH(p.x, p.y, dotR)));
+
+    // recombination flashes
+    flashes.forEach((f) => {
+      const k = f.age / 0.45;
+      ctx.globalAlpha = (1 - k) * 0.8; ctx.strokeStyle = C.sin; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 3 + k * 12, 0, 7); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
+    drawCircuit();
+  }
+
+  function drawField() {
+    const mag = clamp(S.wdep / g.W0, 0, 1.8);
+    if (mag < 0.2 || S.wdep < 8) return;
+    const x0 = g.xj - S.wdep / 2 + 6, x1 = g.xj + S.wdep / 2 - 6;
+    if (x1 - x0 < 12) return;
+    ctx.save(); ctx.globalAlpha = clamp(0.2 + 0.4 * mag, 0, 0.8); ctx.strokeStyle = C.sin; ctx.fillStyle = C.sin; ctx.lineWidth = 1.6;
+    for (let j = 0; j < 3; j++) {
+      const y = lerp(g.barY0 + 14, g.barY1 - 14, j / 2);
+      ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x0 + 5, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + 6, y - 3.5); ctx.lineTo(x0 + 6, y + 3.5); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = clamp(0.2 + 0.4 * mag, 0, 0.8); label("built-in field", g.xj, g.barY1 + 14, C.sin, 9); ctx.globalAlpha = 1;
+  }
+
+  function drawCircuit() {
+    const { pLeadX, nLeadX, barY0, topY, xj } = g;
+    const fwd = S.bias > 0.02, rev = S.bias < -0.02;
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(pLeadX, barY0); ctx.lineTo(pLeadX, topY); ctx.lineTo(nLeadX, topY); ctx.lineTo(nLeadX, barY0); ctx.stroke();
+
+    // battery in the top wire — its polarity is the applied bias
+    const pPlusLeft = fwd;   // forward: + terminal wired to the p side (left)
+    const bx = xj;
+    const draw2 = (on) => {
+      if (!on) return;
+      const longX = pPlusLeft ? bx - 6 : bx + 6, shortX = pPlusLeft ? bx + 6 : bx - 6;
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(longX, topY - 10); ctx.lineTo(longX, topY + 10); ctx.stroke();
+      ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(shortX, topY - 6); ctx.lineTo(shortX, topY + 6); ctx.stroke();
+    };
+    draw2(fwd || rev);
+
+    // terminal polarity at the two contacts
+    const pSign = fwd ? "+" : rev ? "–" : "";
+    const nSign = fwd ? "–" : rev ? "+" : "";
+    label("P", pLeadX, barY0 - 12, C.muted, 11); label("N", nLeadX, barY0 - 12, C.muted, 11);
+    if (pSign) label(pSign, pLeadX - 12, topY + 2, pSign === "+" ? C.sin : C.muted, 14);
+    if (nSign) label(nSign, nLeadX + 12, topY + 2, nSign === "+" ? C.sin : C.muted, 14);
+
+    // conventional current arrow inside the bar when forward-conducting
+    if (!S.forming && curr(S.bias) > 0) {
+      const y = barY0 + 12, a = 0.55 + 0.35 * Math.sin(S.t * 5);
+      ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = C.ok; ctx.fillStyle = C.ok; ctx.lineWidth = 2 + 2.5 * curr(S.bias); ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(g.pLeadX, y); ctx.lineTo(g.nLeadX - 7, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(g.nLeadX, y); ctx.lineTo(g.nLeadX - 9, y - 5); ctx.lineTo(g.nLeadX - 9, y + 5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      label("current", (g.pLeadX + g.nLeadX) / 2, y - 11, C.ok, 9);
+    }
+  }
+
+  function updateStatus() {
+    const el = $("status"), b = S.bias;
+    if (S.forming) { el.textContent = "Forming junction…"; el.classList.remove("on"); return; }
+    if (b < -0.05) { el.textContent = "Reverse — blocked"; el.classList.remove("on"); }
+    else if (b <= 0.05) { el.textContent = "Equilibrium"; el.classList.remove("on"); }
+    else if (b <= 0.35) { el.textContent = "Forward — below barrier"; el.classList.remove("on"); }
+    else { el.textContent = "Forward — conducting"; el.classList.add("on"); }
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
+
+  function startForm() {
+    S.wdep = 0; S.forming = true; S.recAcc = 0;
+    seedInRect(pHoles, 18, g.pLeft + 6, g.xj - 6, g.barY0 + 6, g.barY1 - 6);
+    seedInRect(nElectrons, 18, g.xj + 6, g.nRight - 6, g.barY0 + 6, g.barY1 - 6);
+    crossers.length = 0;
+  }
+
+  $("bias-slider").oninput = (e) => { S.bias = parseFloat(e.target.value); };
+  $("form-btn").onclick = startForm;
+  $("play-btn").onclick = () => { S.running = !S.running; $("play-btn").textContent = S.running ? "Pause" : "Play"; last = performance.now(); };
+  $("reset-btn").onclick = () => {
+    S.bias = 0; $("bias-slider").value = 0;
+    S.running = true; $("play-btn").textContent = "Pause"; last = performance.now();
+    startForm();
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); requestAnimationFrame(frame);
+})();
+</script>

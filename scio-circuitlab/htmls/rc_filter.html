@@ -267,7 +267,6 @@
     const q = clamp(Math.abs(S.Vc / A), 0, 1.1), vs = S.Vc >= 0 ? 1 : -1;
     // electric field between the plates (density ~ V_C): the voltage the separation creates
     const nF = Math.round(q * 7);
-    ctx.strokeStyle = C.sc; ctx.globalAlpha = 0.3; ctx.setLineDash([4, 5]);
     for (let k = 0; k < nF; k++) { const x = gx + 8 + (gw - 16) * (nF === 1 ? 0.5 : k / (nF - 1)); line(x, pTop + 7, x, pBot - 7, C.sc, 1.4); }
     ctx.setLineDash([]); ctx.globalAlpha = 1;
     // charges packed onto each plate (count ~ |V_C|); '+' on whichever plate the source drives high
