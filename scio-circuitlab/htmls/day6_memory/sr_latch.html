@@ -1,0 +1,300 @@
+<title>SR latch — memory from feedback</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --ok: #1f9d57;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c; --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff; --ok: #1f9d57;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; padding: clamp(14px, 2.4vw, 34px); -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  .bar-right { display: flex; align-items: center; gap: 12px; }
+  .pill { font-family: var(--mono); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; padding: 7px 15px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--panel-2); }
+  .pill.hi { color: var(--accent-ink); background: var(--sig-in); border-color: transparent; }
+  .icon-btn { font-family: var(--mono); font-size: .95rem; line-height: 1; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--ink); }
+
+  .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  canvas { display: block; width: 100%; height: clamp(400px, 56vw, 520px); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; padding: 2px; }
+  .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+
+  /* one toggle per input — same component as the day5 gate toys */
+  .inputs { display: flex; flex-wrap: wrap; gap: 12px; }
+  .switch { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 8px 12px 8px 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 11px; }
+  .switch:hover { border-color: var(--accent); }
+  .switch .name { font-weight: 600; color: var(--muted); }
+  .switch.on .name { color: var(--sig-in); }
+  .switch .track { width: 34px; height: 18px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); position: relative; transition: background .15s, border-color .15s; }
+  .switch .thumb { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: left .15s, background .15s; }
+  .switch.on .track { background: var(--sig-in); border-color: transparent; }
+  .switch.on .thumb { left: 17px; background: var(--accent-ink); }
+  .switch .val { min-width: 1ch; text-align: center; color: var(--muted); }
+  .switch.on .val { color: var(--sig-in); }
+
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">SR latch · cross-coupled NOR</span>
+      <div class="bar-right">
+        <span class="pill" id="status">Q = 0</span>
+        <button class="icon-btn" id="theme-btn" title="Toggle light / dark">◐</button>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="Two cross-coupled NOR gates forming an SR latch. Set and Reset inputs on the left, Q and Q-bar outputs on the right, with each output fed back into the other gate."></canvas></div>
+
+    <div class="deck">
+      <div class="inputs" id="inputs"></div>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), accent: g("--accent"), aink: g("--accent-ink"),
+      ok: g("--ok"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const nor = (a, b) => (a || b ? 0 : 1);
+
+  // ---- state ---------------------------------------------------------------
+  // inputs are clean 0/1; q / qbar are the latch's remembered state. Because the
+  // two NOR gates feed each other, this loop has no "first" node to evaluate in
+  // order — so we settle it by iterating the two equations a handful of times,
+  // starting from the state it is already holding. When S=R=0 the current state
+  // is already a fixed point, so it simply holds: that is the memory.
+  const inputs = [0, 0];          // [S, R]
+  const names = ["S", "R"];
+  let q = 0, qbar = 1;            // logical outputs
+  let dq = 0, dqbar = 1;          // eased display values (for glow / wire colour)
+
+  function settle() {
+    const s = inputs[0], r = inputs[1];
+    for (let i = 0; i < 8; i++) {          // sequential update converges without visible oscillation
+      q = nor(r, qbar);
+      qbar = nor(s, q);
+    }
+  }
+
+  function step(dt) {
+    settle();
+    const e = 1 - Math.pow(0.008, Math.min(dt, 0.05));
+    dq += (q - dq) * e;
+    dqbar += (qbar - dqbar) * e;
+  }
+
+  // ---- canvas + layout (coordinates are all here, easy to hand-tune) -------
+  const cv = $("scene");
+  let ctx, W, H, DPR, g = {};
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    const cx = W * 0.5;
+    const bw = clamp(W * 0.16, 108, 168), bh = clamp(H * 0.17, 84, 118);
+    const topY = H * 0.32, botY = H * 0.68, midY = (topY + botY) / 2;
+    const br = clamp(bh * 0.15, 5, 8);
+    const portOff = bh * 0.24;
+    g = {
+      cx, bw, bh, br, topY, botY, midY, portOff,
+      gL: cx - bw / 2, gR: cx + bw / 2, outX: cx + bw / 2 + 2 * br,
+      leftX: W * 0.1, rightX: W * 0.9, lampR: clamp(W * 0.026, 16, 22),
+      gap: clamp(H * 0.055, 20, 40),
+      tapQ: cx + bw / 2 + 2 * br + W * 0.035,      // Q feedback tap (nearer)
+      tapQbar: cx + bw / 2 + 2 * br + W * 0.075,   // Q-bar feedback tap (farther out)
+      retQ: cx - bw / 2 - W * 0.05,                // Q feedback left return channel
+      retQbar: cx - bw / 2 - W * 0.09,             // Q-bar feedback left return channel
+    };
+  }
+
+  // ---- drawing helpers ----
+  const mix = (a, b, t) => {
+    t = clamp(t, 0, 1);
+    const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const pa = p(a.length === 7 ? a : "#888888"), pb = p(b.length === 7 ? b : "#888888");
+    return `rgb(${Math.round(lerp(pa[0], pb[0], t))},${Math.round(lerp(pa[1], pb[1], t))},${Math.round(lerp(pa[2], pb[2], t))})`;
+  };
+  const hot = (v) => mix(C.muted, C.sin, v);
+  const label = (txt, x, y, col, size) => {
+    ctx.fillStyle = col; ctx.font = "600 " + (size || 12) + "px " + mono;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+  };
+  const dot = (x, y, r, col, glow) => {
+    ctx.save(); if (glow) { ctx.shadowColor = col; ctx.shadowBlur = glow; }
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore();
+  };
+
+  // multi-point orthogonal wire, coloured and lit by the value it carries
+  function wire(pts, v) {
+    const col = hot(v);
+    ctx.save();
+    ctx.globalAlpha = lerp(0.5, 1, v);
+    ctx.shadowColor = col; ctx.shadowBlur = lerp(0, 12, v);
+    ctx.strokeStyle = col; ctx.lineWidth = lerp(2.2, 3.8, v); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke(); ctx.restore();
+  }
+
+  function norPath(x0, cy, bw, bh) {
+    const r = bh / 2;
+    ctx.beginPath();
+    ctx.moveTo(x0, cy - r);
+    ctx.quadraticCurveTo(x0 + bw * 0.62, cy - r, x0 + bw, cy);
+    ctx.quadraticCurveTo(x0 + bw * 0.62, cy + r, x0, cy + r);
+    ctx.quadraticCurveTo(x0 + bw * 0.3, cy, x0, cy - r);
+    ctx.closePath();
+  }
+
+  function drawGate(cy, v) {
+    const { bw, bh, br, cx } = g, x0 = cx - bw / 2, hi = v > 0.5, edge = hi ? C.sin : C.border;
+    ctx.save();
+    norPath(x0, cy, bw, bh);
+    ctx.fillStyle = mix(C.panel2, C.sin, v * 0.22); ctx.fill();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 14; }
+    ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.4 : 1.5; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+    const bx = x0 + bw + br;
+    ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.2 : 1.5;
+    ctx.beginPath(); ctx.arc(bx, cy, br, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    label("NOR", x0 + bw * 0.42, cy, C.ink, clamp(bh * 0.2, 10, 13));
+  }
+
+  function drawLamp(x, y, valBit, dispVal, text, bar) {
+    const r = g.lampR, on = dispVal > 0.5;
+    ctx.save();
+    if (on) { ctx.shadowColor = C.sin; ctx.shadowBlur = 20; }
+    ctx.fillStyle = mix(C.panel2, C.sin, dispVal); ctx.strokeStyle = on ? C.sin : C.muted; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    label(valBit ? "1" : "0", x, y, on ? C.aink : C.muted, r * 0.85);
+    label(text, x, y + r + 15, hot(dispVal), 12);
+    if (bar) { const w = 7; ctx.strokeStyle = hot(dispVal); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - w, y + r + 8); ctx.lineTo(x + w, y + r + 8); ctx.stroke(); }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const { cx, gL, outX, topY, botY, midY, portOff, leftX, rightX, lampR, gap,
+      tapQ, tapQbar, retQ, retQbar } = g;
+    const s = inputs[0], r = inputs[1];
+
+    // external inputs: R into top gate's outer port, S into bottom gate's outer port
+    wire([[leftX + lampR, topY - portOff], [gL, topY - portOff]], r);
+    wire([[leftX + lampR, botY + portOff], [gL, botY + portOff]], s);
+
+    // feedback: each output loops down/up through the gap into the OTHER gate's inner port
+    wire([[tapQ, topY], [tapQ, midY - gap], [retQ, midY - gap], [retQ, botY - portOff], [gL, botY - portOff]], dq);
+    wire([[tapQbar, botY], [tapQbar, midY + gap], [retQbar, midY + gap], [retQbar, topY + portOff], [gL, topY + portOff]], dqbar);
+
+    // outputs to lamps (tap points sit on these wires)
+    wire([[outX, topY], [rightX - lampR, topY]], dq);
+    wire([[outX, botY], [rightX - lampR, botY]], dqbar);
+
+    drawGate(topY, dq);       // top gate outputs Q
+    drawGate(botY, dqbar);    // bottom gate outputs Q-bar
+
+    dot(tapQ, topY, 3.5, hot(dq), dq > 0.5 ? 8 : 0);
+    dot(tapQbar, botY, 3.5, hot(dqbar), dqbar > 0.5 ? 8 : 0);
+
+    drawLamp(leftX, topY - portOff, r, r, "R");
+    drawLamp(leftX, botY + portOff, s, s, "S");
+    drawLamp(rightX, topY, q, dq, "Q");
+    drawLamp(rightX, botY, qbar, dqbar, "Q", true);
+  }
+
+  function updateStatus() {
+    const el = $("status");
+    el.textContent = "Q = " + q;
+    el.classList.toggle("hi", q === 1);
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
+
+  // ---- controls ----
+  function buildInputs() {
+    const host = $("inputs"); host.innerHTML = "";
+    names.forEach((name, i) => {
+      const b = document.createElement("button");
+      b.className = "switch"; b.dataset.i = String(i);
+      b.innerHTML = '<span class="name">' + name + '</span>'
+        + '<span class="track"><span class="thumb"></span></span>'
+        + '<span class="val">0</span>';
+      b.onclick = () => { inputs[i] = inputs[i] ? 0 : 1; syncInputs(); };
+      host.appendChild(b);
+    });
+    syncInputs();
+  }
+  function syncInputs() {
+    const kids = $("inputs").children;
+    for (let i = 0; i < kids.length; i++) {
+      const on = inputs[i] === 1;
+      kids[i].classList.toggle("on", on);
+      kids[i].querySelector(".val").textContent = on ? "1" : "0";
+    }
+  }
+
+  $("reset-btn").onclick = () => { inputs[0] = 0; inputs[1] = 0; q = 0; qbar = 1; syncInputs(); };
+  $("theme-btn").onclick = () => {
+    const cur = document.documentElement.getAttribute("data-theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); buildInputs(); requestAnimationFrame(frame);
+})();
+</script>

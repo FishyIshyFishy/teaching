@@ -1,0 +1,406 @@
+<title>D flip-flop — master &amp; slave</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --ok: #1f9d57;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c; --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff; --ok: #1f9d57;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; padding: clamp(14px, 2.4vw, 34px); -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  .bar-right { display: flex; align-items: center; gap: 12px; }
+  .pill { font-family: var(--mono); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; padding: 7px 15px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--panel-2); }
+  .pill.hi { color: var(--accent-ink); background: var(--sig-in); border-color: transparent; }
+  .icon-btn { font-family: var(--mono); font-size: .95rem; line-height: 1; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--ink); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 3px; gap: 2px; }
+  .seg button { font-family: var(--mono); font-size: .82rem; letter-spacing: .08em; color: var(--muted); background: transparent; border: 0; padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { color: var(--accent-ink); background: var(--accent); }
+
+  .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  canvas { display: block; width: 100%; height: clamp(440px, 62vw, 600px); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 22px; padding: 2px; }
+  .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+
+  .inputs { display: flex; flex-wrap: wrap; gap: 12px; }
+  .switch { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 8px 12px 8px 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 11px; }
+  .switch:hover { border-color: var(--accent); }
+  .switch .name { font-weight: 600; color: var(--muted); }
+  .switch.on .name { color: var(--sig-in); }
+  .switch .track { width: 34px; height: 18px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); position: relative; transition: background .15s, border-color .15s; }
+  .switch .thumb { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: left .15s, background .15s; }
+  .switch.on .track { background: var(--sig-in); border-color: transparent; }
+  .switch.on .thumb { left: 17px; background: var(--accent-ink); }
+  .switch .val { min-width: 1ch; text-align: center; color: var(--muted); }
+  .switch.on .val { color: var(--sig-in); }
+
+  .rng { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: .78rem; letter-spacing: .04em; color: var(--muted); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 148px; height: 4px; border-radius: 999px; background: var(--border); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 0; }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 0; }
+
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">D flip-flop · master &amp; slave</span>
+      <div class="bar-right">
+        <span class="pill" id="status">Q = 0</span>
+        <button class="icon-btn" id="theme-btn" title="Toggle light / dark">◐</button>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="A D flip-flop built from a master and a slave D-latch, with a clock. Below the schematic, a scrolling timing diagram shows the clock, the D input, and the Q output, so Q is seen to sample D only on each rising clock edge."></canvas></div>
+
+    <div class="deck">
+      <div class="inputs" id="inputs"></div>
+      <div class="seg" id="mode"></div>
+      <div id="clk-ctrl"></div>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), accent: g("--accent"), aink: g("--accent-ink"),
+      ok: g("--ok"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---- state ---------------------------------------------------------------
+  // Two D-latches in series make a rising-edge flip-flop. The master is
+  // transparent while the clock is LOW (it tracks D); the slave is transparent
+  // while the clock is HIGH (it copies the master out to Q). So the value D had
+  // just before the clock rises is the value that lands on Q — Q samples on the
+  // edge, and holds the rest of the time. Nothing computes Q from a formula;
+  // it falls out of which latch is currently open.
+  let d = 0, clk = 0, m = 0, q = 0, qbar = 1;
+  let dd = 0, dclk = 0, dm = 0, dq = 0, dqbar = 1;   // eased display values
+
+  let mode = "auto";
+  let speed = 55;             // 0..100 → clock rate in auto mode
+  let manualClk = 0;          // clock value in manual mode
+  let clkAcc = 0;             // auto-clock phase accumulator
+
+  const hist = [];            // rolling timing-diagram samples {clk,d,q}
+  const maxSamples = 260;
+  let sampAcc = 0;
+  const sampInt = 0.03;
+
+  function updateModel() {
+    if (clk === 0) m = d;      // master open → follows D
+    else q = m;                // slave open → publishes the captured value
+    qbar = q ? 0 : 1;
+  }
+
+  function step(dt) {
+    dt = Math.min(dt, 0.05);
+    // clock source
+    if (mode === "auto") {
+      const half = lerp(1.4, 0.16, speed / 100);
+      clkAcc += dt;
+      while (clkAcc >= half) { clkAcc -= half; clk = clk ? 0 : 1; }
+    } else {
+      clk = manualClk;
+    }
+    updateModel();
+
+    // timing history at a fixed rate so scroll speed is steady
+    sampAcc += dt;
+    while (sampAcc >= sampInt) { sampAcc -= sampInt; hist.push({ clk, d, q }); if (hist.length > maxSamples) hist.shift(); }
+
+    const e = 1 - Math.pow(0.006, dt);
+    dd += (d - dd) * e; dclk += (clk - dclk) * e; dm += (m - dm) * e;
+    dq += (q - dq) * e; dqbar += (qbar - dqbar) * e;
+  }
+
+  // ---- canvas + layout (all coordinates here, easy to hand-tune) -----------
+  const cv = $("scene");
+  let ctx, W, H, DPR, g = {};
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    const schMid = H * 0.27;
+    const boxW = clamp(W * 0.16, 100, 156), boxH = clamp(H * 0.2, 88, 128);
+    const br = clamp(boxH * 0.09, 6, 9);
+    g = {
+      schMid, boxW, boxH, br,
+      masterX: W * 0.38, slaveX: W * 0.64,
+      lampR: clamp(W * 0.026, 16, 22),
+      dX: W * 0.08, qX: W * 0.92,
+      dY: schMid - boxH * 0.24, qY: schMid - boxH * 0.2, qbarY: schMid + boxH * 0.24,
+      clkX: W * 0.08, clkY: schMid + boxH * 0.62,
+      clkRailY: schMid + boxH * 0.5 + H * 0.055,
+      tTop: H * 0.6, tBot: H * 0.955, tL: W * 0.14, tR: W * 0.96,
+    };
+  }
+
+  // ---- drawing helpers ----
+  const mix = (a, b, t) => {
+    t = clamp(t, 0, 1);
+    const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const pa = p(a.length === 7 ? a : "#888888"), pb = p(b.length === 7 ? b : "#888888");
+    return `rgb(${Math.round(lerp(pa[0], pb[0], t))},${Math.round(lerp(pa[1], pb[1], t))},${Math.round(lerp(pa[2], pb[2], t))})`;
+  };
+  const hot = (v) => mix(C.muted, C.sin, v);
+  const label = (txt, x, y, col, size, align) => {
+    ctx.fillStyle = col; ctx.font = "600 " + (size || 12) + "px " + mono;
+    ctx.textAlign = align || "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+  };
+  const dot = (x, y, r, col, glow) => {
+    ctx.save(); if (glow) { ctx.shadowColor = col; ctx.shadowBlur = glow; }
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore();
+  };
+  function wire(pts, v) {
+    const col = hot(v);
+    ctx.save();
+    ctx.globalAlpha = lerp(0.5, 1, v);
+    ctx.shadowColor = col; ctx.shadowBlur = lerp(0, 12, v);
+    ctx.strokeStyle = col; ctx.lineWidth = lerp(2.2, 3.6, v); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke(); ctx.restore();
+  }
+
+  // a latch drawn as a labelled box; glows (cyan = active) while it is open
+  function drawLatch(cx, title, bit, dispBit, open) {
+    const { boxW, boxH } = g, x0 = cx - boxW / 2, y0 = g.schMid - boxH / 2;
+    ctx.save();
+    ctx.fillStyle = C.panel2;
+    if (open) { ctx.shadowColor = C.accent; ctx.shadowBlur = 16; }
+    roundRect(x0, y0, boxW, boxH, 10); ctx.fill();
+    ctx.strokeStyle = open ? C.accent : C.border; ctx.lineWidth = open ? 2.4 : 1.5;
+    roundRect(x0, y0, boxW, boxH, 10); ctx.stroke();
+    ctx.restore();
+    label(title, cx, y0 + boxH * 0.2, C.muted, clamp(boxH * 0.11, 10, 13));
+    label("D-latch", cx, y0 + boxH * 0.82, C.muted, clamp(boxH * 0.085, 8, 11));
+    // the value this latch currently holds
+    label(String(bit), cx, g.schMid + boxH * 0.02, hot(dispBit), clamp(boxH * 0.34, 20, 34));
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  function drawLamp(x, y, valBit, dispVal, text, bar) {
+    const r = g.lampR, on = dispVal > 0.5;
+    ctx.save();
+    if (on) { ctx.shadowColor = C.sin; ctx.shadowBlur = 20; }
+    ctx.fillStyle = mix(C.panel2, C.sin, dispVal); ctx.strokeStyle = on ? C.sin : C.muted; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    label(valBit ? "1" : "0", x, y, on ? C.aink : C.muted, r * 0.85);
+    label(text, x, y + r + 15, hot(dispVal), 12);
+    if (bar) { const w = 7; ctx.strokeStyle = hot(dispVal); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - w, y + r + 8); ctx.lineTo(x + w, y + r + 8); ctx.stroke(); }
+  }
+
+  function drawSchematic() {
+    const { schMid, boxW, boxH, br, masterX, slaveX, lampR, dX, qX, dY, qY, qbarY,
+      clkX, clkY, clkRailY } = g;
+    const mL = masterX - boxW / 2, mR = masterX + boxW / 2;
+    const sL = slaveX - boxW / 2, sR = slaveX + boxW / 2;
+    const enY = schMid + boxH / 2;                 // enable enters bottom of each box
+    const masterOpen = clk === 0, slaveOpen = clk === 1;
+
+    // data path: D → master → slave → Q
+    wire([[dX + lampR, dY], [mL, dY], [mL, schMid]], dd);
+    wire([[mR, schMid], [sL, schMid]], dm);
+    wire([[sR, schMid], [qX - lampR, qY]], dq);
+    wire([[sR, schMid], [qX - lampR, qbarY]], dqbar);
+
+    // clock rail along the bottom, rising into each latch's enable
+    wire([[clkX + lampR, clkY], [clkX + lampR, clkRailY], [slaveX, clkRailY], [slaveX, enY + br * 2]], dclk);
+    // slave enable = clock (direct)
+    wire([[slaveX, enY + br * 2], [slaveX, enY]], dclk);
+    // master enable = NOT clock (bubble on its riser)
+    wire([[masterX, clkRailY], [masterX, enY + br * 2 + br]], dclk);
+    ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = dclk > 0.5 ? C.sin : C.border; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(masterX, enY + br + br, br, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    wire([[masterX, enY + br], [masterX, enY]], clk ? 0 : 1);
+    dot(masterX, clkRailY, 3.5, hot(dclk), dclk > 0.5 ? 6 : 0);
+
+    drawLatch(masterX, "MASTER", m, dm, masterOpen);
+    drawLatch(slaveX, "SLAVE", q, dq, slaveOpen);
+
+    drawLamp(dX, dY, d, dd, "D");
+    drawLamp(clkX, clkY, clk, dclk, "CLK");
+    drawLamp(qX, qY, q, dq, "Q");
+    drawLamp(qX, qbarY, qbar, dqbar, "Q", true);
+  }
+
+  // ---- timing diagram ----
+  function drawTiming() {
+    const { tTop, tBot, tL, tR } = g;
+    const lanes = [
+      { key: "clk", name: "CLK", col: C.accent },
+      { key: "d", name: "D", col: C.sin },
+      { key: "q", name: "Q", col: C.sin },
+    ];
+    const laneH = (tBot - tTop) / lanes.length;
+    const xAt = (i) => lerp(tL, tR, i / (maxSamples - 1));
+
+    // faint vertical guides at each rising clock edge — the moments Q can change
+    ctx.save(); ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+    for (let i = 1; i < hist.length; i++) {
+      if (hist[i].clk === 1 && hist[i - 1].clk === 0) {
+        const x = xAt(i); ctx.beginPath(); ctx.moveTo(x, tTop + 6); ctx.lineTo(x, tBot - 6); ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    lanes.forEach((lane, li) => {
+      const top = tTop + li * laneH, hiY = top + laneH * 0.28, loY = top + laneH * 0.72;
+      ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(tL, loY); ctx.lineTo(tR, loY); ctx.stroke();
+      label(lane.name, tL - 10, (hiY + loY) / 2, C.muted, 12, "right");
+
+      if (hist.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = lane.col; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.beginPath();
+        let py = hist[0][lane.key] ? hiY : loY;
+        ctx.moveTo(xAt(0), py);
+        for (let i = 1; i < hist.length; i++) {
+          const x = xAt(i), y = hist[i][lane.key] ? hiY : loY;
+          if (y !== py) ctx.lineTo(x, py);      // vertical transition first
+          ctx.lineTo(x, y);
+          py = y;
+        }
+        ctx.stroke(); ctx.restore();
+      }
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    drawSchematic();
+    drawTiming();
+  }
+
+  function updateStatus() {
+    const el = $("status");
+    el.textContent = "Q = " + q;
+    el.classList.toggle("hi", q === 1);
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
+
+  // ---- controls ----
+  function buildInputs() {
+    const host = $("inputs"); host.innerHTML = "";
+    const b = document.createElement("button");
+    b.className = "switch";
+    b.innerHTML = '<span class="name">D</span><span class="track"><span class="thumb"></span></span><span class="val">0</span>';
+    b.onclick = () => { d = d ? 0 : 1; syncInputs(); };
+    host.appendChild(b);
+    syncInputs();
+  }
+  function syncInputs() {
+    const b = $("inputs").firstChild;
+    if (!b) return;
+    b.classList.toggle("on", d === 1);
+    b.querySelector(".val").textContent = d ? "1" : "0";
+  }
+
+  function buildMode() {
+    const host = $("mode"); host.innerHTML = "";
+    [["auto", "Auto clock"], ["manual", "Manual clock"]].forEach(([id, txt]) => {
+      const b = document.createElement("button");
+      b.textContent = txt; b.dataset.mode = id;
+      b.classList.toggle("on", id === mode);
+      b.onclick = () => { mode = id; if (mode === "manual") { manualClk = clk; } buildClkCtrl(); syncMode(); };
+      host.appendChild(b);
+    });
+  }
+  function syncMode() { for (const b of $("mode").children) b.classList.toggle("on", b.dataset.mode === mode); }
+
+  function buildClkCtrl() {
+    const host = $("clk-ctrl"); host.innerHTML = "";
+    if (mode === "auto") {
+      const box = document.createElement("label"); box.className = "rng";
+      box.innerHTML = '<span>slow</span>';
+      const r = document.createElement("input");
+      r.type = "range"; r.min = "0"; r.max = "100"; r.value = String(speed);
+      r.oninput = () => { speed = Number(r.value); };
+      box.appendChild(r);
+      const fast = document.createElement("span"); fast.textContent = "fast"; box.appendChild(fast);
+      host.appendChild(box);
+    } else {
+      const b = document.createElement("button");
+      b.className = "switch";
+      b.innerHTML = '<span class="name">CLK</span><span class="track"><span class="thumb"></span></span><span class="val">0</span>';
+      const sync = () => { b.classList.toggle("on", manualClk === 1); b.querySelector(".val").textContent = manualClk ? "1" : "0"; };
+      b.onclick = () => { manualClk = manualClk ? 0 : 1; sync(); };
+      host.appendChild(b); sync();
+    }
+  }
+
+  $("reset-btn").onclick = () => {
+    d = 0; m = 0; q = 0; qbar = 1; manualClk = 0; clk = 0; clkAcc = 0;
+    hist.length = 0; syncInputs(); buildClkCtrl();
+  };
+  $("theme-btn").onclick = () => {
+    const cur = document.documentElement.getAttribute("data-theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); buildInputs(); buildMode(); buildClkCtrl(); requestAnimationFrame(frame);
+})();
+</script>
