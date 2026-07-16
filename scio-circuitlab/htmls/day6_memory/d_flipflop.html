@@ -1,4 +1,4 @@
-<title>D flip-flop — master &amp; slave</title>
+<title>D flip-flop — the gates</title>
 <style>
   :root {
     --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
@@ -34,7 +34,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; }
   .wrap { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; padding: clamp(14px, 2.4vw, 34px); -webkit-font-smoothing: antialiased; }
-  .shell { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .shell { max-width: 1060px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
 
   .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
   .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
@@ -50,7 +50,7 @@
   .seg button.on { color: var(--accent-ink); background: var(--accent); }
 
   .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
-  canvas { display: block; width: 100%; height: clamp(440px, 62vw, 600px); }
+  canvas { display: block; width: 100%; height: clamp(520px, 74vw, 720px); }
 
   .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 22px; padding: 2px; }
   .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; }
@@ -79,14 +79,14 @@
 <div class="wrap">
   <div class="shell">
     <div class="bar">
-      <span class="eyebrow">D flip-flop · master &amp; slave</span>
+      <span class="eyebrow">D flip-flop · six NAND gates</span>
       <div class="bar-right">
         <span class="pill" id="status">Q = 0</span>
         <button class="icon-btn" id="theme-btn" title="Toggle light / dark">◐</button>
       </div>
     </div>
 
-    <div class="stage"><canvas id="scene" aria-label="A D flip-flop built from a master and a slave D-latch, with a clock. Below the schematic, a scrolling timing diagram shows the clock, the D input, and the Q output, so Q is seen to sample D only on each rising clock edge."></canvas></div>
+    <div class="stage"><canvas id="scene" aria-label="A positive-edge-triggered D flip-flop built from six cross-coupled NAND gates, with D and clock inputs and Q / Q-bar outputs. Below the schematic, a scrolling timing diagram shows the clock, D, and Q, so Q is seen to sample D only on each rising clock edge."></canvas></div>
 
     <div class="deck">
       <div class="inputs" id="inputs"></div>
@@ -117,75 +117,133 @@
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
   new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
+  const nand = (...a) => (a.every((x) => x) ? 0 : 1);
+
+  // ---- the flip-flop, as six NAND gates -----------------------------------
+  // A positive-edge-triggered D flip-flop is six NAND gates wired in three
+  // cross-coupled pairs. Each gate's inputs are the OUTPUTS of other gates (and
+  // D / the clock) — so there is no "first" gate to evaluate in order. As with
+  // the SR latch, we settle the whole tangle by iterating every gate equation
+  // to a steady state each frame. The edge-triggering is not coded anywhere; it
+  // simply falls out of how the gates feed one another.
+  const gate = {
+    n1: ["n2", "n4"],
+    n2: ["n1", "CLK"],
+    n3: ["n2", "CLK", "n4"],
+    n4: ["n3", "D"],
+    n5: ["n2", "n6"],        // Q
+    n6: ["n5", "n3"],        // Q-bar
+  };
+  const ids = ["n1", "n2", "n3", "n4", "n5", "n6"];
+
+  // every wire in the picture: {from, to, port, route-kind + channels}
+  // kinds — fwd: out→[vx]→in ; wrapT/wrapB: feedback over top / under bottom ;
+  //         gapU/gapD: cross-couple through the pair's gap (like the SR latch).
+  const links = [
+    { s: "n1", t: "n2", k: 0, kind: "fwd", vx: 0.40 },
+    { s: "n2", t: "n1", k: 0, kind: "wrapT", yc: 0.055, rx: 0.245 },
+    { s: "n2", t: "n3", k: 0, kind: "gapL", vx: 0.55, yc: 0.305, rx: 0.435 },
+    { s: "n2", t: "n5", k: 0, kind: "fwd", vx: 0.60 },
+    { s: "n4", t: "n1", k: 1, kind: "wrapT", yc: 0.032, rx: 0.205 },
+    { s: "n4", t: "n3", k: 2, kind: "fwd", vx: 0.42 },
+    { s: "CLK", t: "n2", k: 1, kind: "clk" },
+    { s: "CLK", t: "n3", k: 1, kind: "clk" },
+    { s: "n3", t: "n4", k: 0, kind: "wrapB", yc: 0.55, rx: 0.245 },
+    { s: "n3", t: "n6", k: 1, kind: "fwd", vx: 0.635 },
+    { s: "D", t: "n4", k: 1, kind: "din" },
+    { s: "n5", t: "n6", k: 0, kind: "gapD", yc: 0.30, dd: 0.05, rx: 0.665 },
+    { s: "n6", t: "n5", k: 1, kind: "gapU", yc: 0.30, dd: 0.05, rx: 0.685 },
+  ];
+
   // ---- state ---------------------------------------------------------------
-  // Two D-latches in series make a rising-edge flip-flop. The master is
-  // transparent while the clock is LOW (it tracks D); the slave is transparent
-  // while the clock is HIGH (it copies the master out to Q). So the value D had
-  // just before the clock rises is the value that lands on Q — Q samples on the
-  // edge, and holds the rest of the time. Nothing computes Q from a formula;
-  // it falls out of which latch is currently open.
-  let d = 0, clk = 0, m = 0, q = 0, qbar = 1;
-  let dd = 0, dclk = 0, dm = 0, dq = 0, dqbar = 1;   // eased display values
+  let d = 0, clk = 0;
+  const o = { n1: 1, n2: 1, n3: 1, n4: 1, n5: 0, n6: 1 };   // gate outputs (state)
+  const dv = { n1: 1, n2: 1, n3: 1, n4: 1, n5: 0, n6: 1 };  // eased display values
+  let dd = 0, dclk = 0;
 
-  let mode = "auto";
-  let speed = 55;             // 0..100 → clock rate in auto mode
-  let manualClk = 0;          // clock value in manual mode
-  let clkAcc = 0;             // auto-clock phase accumulator
+  let mode = "auto", speed = 55, manualClk = 0, clkAcc = 0;
+  const hist = []; const maxSamples = 260; let sampAcc = 0; const sampInt = 0.03;
 
-  const hist = [];            // rolling timing-diagram samples {clk,d,q}
-  const maxSamples = 260;
-  let sampAcc = 0;
-  const sampInt = 0.03;
-
-  function updateModel() {
-    if (clk === 0) m = d;      // master open → follows D
-    else q = m;                // slave open → publishes the captured value
-    qbar = q ? 0 : 1;
+  function settle() {
+    for (let it = 0; it < 24; it++) {
+      o.n1 = nand(o.n2, o.n4);
+      o.n2 = nand(o.n1, clk);
+      o.n3 = nand(o.n2, clk, o.n4);
+      o.n4 = nand(o.n3, d);
+      o.n5 = nand(o.n2, o.n6);
+      o.n6 = nand(o.n5, o.n3);
+    }
   }
 
   function step(dt) {
     dt = Math.min(dt, 0.05);
-    // clock source
     if (mode === "auto") {
       const half = lerp(1.4, 0.16, speed / 100);
       clkAcc += dt;
       while (clkAcc >= half) { clkAcc -= half; clk = clk ? 0 : 1; }
-    } else {
-      clk = manualClk;
-    }
-    updateModel();
+    } else clk = manualClk;
+    settle();
 
-    // timing history at a fixed rate so scroll speed is steady
     sampAcc += dt;
-    while (sampAcc >= sampInt) { sampAcc -= sampInt; hist.push({ clk, d, q }); if (hist.length > maxSamples) hist.shift(); }
+    while (sampAcc >= sampInt) { sampAcc -= sampInt; hist.push({ clk, d, q: o.n5 }); if (hist.length > maxSamples) hist.shift(); }
 
     const e = 1 - Math.pow(0.006, dt);
-    dd += (d - dd) * e; dclk += (clk - dclk) * e; dm += (m - dm) * e;
-    dq += (q - dq) * e; dqbar += (qbar - dqbar) * e;
+    dd += (d - dd) * e; dclk += (clk - dclk) * e;
+    for (const id of ids) dv[id] += (o[id] - dv[id]) * e;
   }
 
-  // ---- canvas + layout (all coordinates here, easy to hand-tune) -----------
+  const srcVal = (name) => (name === "CLK" ? dclk : name === "D" ? dd : dv[name]);
+
+  // ---- canvas + layout -----------------------------------------------------
   const cv = $("scene");
   let ctx, W, H, DPR, g = {};
+
+  // gate centres and lamps as fractions of the schematic — nudge here to tune.
+  const place = {
+    n1: [0.31, 0.13], n2: [0.49, 0.20], n3: [0.49, 0.41], n4: [0.31, 0.48],
+    n5: [0.72, 0.22], n6: [0.72, 0.38],
+    D: [0.06, 0.50], CLK: [0.06, 0.12], Q: [0.93, 0.22], Qb: [0.93, 0.38],
+  };
+
   function fit() {
     DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     W = cv.clientWidth; H = cv.clientHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-    const schMid = H * 0.27;
-    const boxW = clamp(W * 0.16, 100, 156), boxH = clamp(H * 0.2, 88, 128);
-    const br = clamp(boxH * 0.09, 6, 9);
+    const bw = clamp(W * 0.08, 56, 84), bh = clamp(H * 0.06, 36, 54), br = clamp(bh * 0.15, 4, 7);
+    const pos = {};
+    for (const key in place) pos[key] = [place[key][0] * W, place[key][1] * H];
     g = {
-      schMid, boxW, boxH, br,
-      masterX: W * 0.38, slaveX: W * 0.64,
-      lampR: clamp(W * 0.026, 16, 22),
-      dX: W * 0.08, qX: W * 0.92,
-      dY: schMid - boxH * 0.24, qY: schMid - boxH * 0.2, qbarY: schMid + boxH * 0.24,
-      clkX: W * 0.08, clkY: schMid + boxH * 0.62,
-      clkRailY: schMid + boxH * 0.5 + H * 0.055,
-      tTop: H * 0.6, tBot: H * 0.955, tL: W * 0.14, tR: W * 0.96,
+      bw, bh, br, pos,
+      lampR: clamp(W * 0.024, 15, 21),
+      xclk: 0.15 * W,
+      tTop: 0.64 * H, tBot: 0.955 * H, tL: 0.14 * W, tR: 0.96 * W,
     };
+  }
+
+  // ---- gate ports ----
+  const hw = () => g.bw / 2;
+  function outP(id) { const [x, y] = g.pos[id]; return [x + hw() + 2 * g.br, y]; }
+  function inP(id, k) {
+    const [x, y] = g.pos[id], n = gate[id].length, off = g.bh * 0.26;
+    let dy = n === 1 ? 0 : n === 2 ? (k === 0 ? -off : off) : (k - 1) * g.bh * 0.32;
+    return [x - hw(), y + dy];
+  }
+
+  // build the pixel polyline for one link
+  function routeOf(L) {
+    const stub = 0.014 * W;
+    const to = inP(L.t, L.k);
+    if (L.kind === "fwd") { const o0 = outP(L.s), vx = L.vx * W; return [o0, [vx, o0[1]], [vx, to[1]], to]; }
+    if (L.kind === "clk") { const cl = g.pos.CLK; return [[cl[0] + g.lampR, cl[1]], [g.xclk, cl[1]], [g.xclk, to[1]], to]; }
+    if (L.kind === "din") { const dl = g.pos.D; return [[dl[0] + g.lampR, to[1]], to]; }
+    if (L.kind === "wrapT") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, L.yc * H], [L.rx * W, L.yc * H], [L.rx * W, to[1]], to]; }
+    if (L.kind === "wrapB") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, L.yc * H], [L.rx * W, L.yc * H], [L.rx * W, to[1]], to]; }
+    if (L.kind === "gapL") { const o0 = outP(L.s); return [o0, [L.vx * W, o0[1]], [L.vx * W, L.yc * H], [L.rx * W, L.yc * H], [L.rx * W, to[1]], to]; }
+    if (L.kind === "gapD") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, (L.yc - L.dd) * H], [L.rx * W, (L.yc - L.dd) * H], [L.rx * W, to[1]], to]; }
+    if (L.kind === "gapU") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, (L.yc + L.dd) * H], [L.rx * W, (L.yc + L.dd) * H], [L.rx * W, to[1]], to]; }
+    return [outP(L.s), to];
   }
 
   // ---- drawing helpers ----
@@ -207,134 +265,92 @@
   function wire(pts, v) {
     const col = hot(v);
     ctx.save();
-    ctx.globalAlpha = lerp(0.5, 1, v);
-    ctx.shadowColor = col; ctx.shadowBlur = lerp(0, 12, v);
-    ctx.strokeStyle = col; ctx.lineWidth = lerp(2.2, 3.6, v); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.globalAlpha = lerp(0.55, 1, v);
+    ctx.shadowColor = col; ctx.shadowBlur = lerp(0, 10, v);
+    ctx.strokeStyle = col; ctx.lineWidth = lerp(2, 3.4, v); ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.stroke(); ctx.restore();
   }
 
-  // a latch drawn as a labelled box; glows (cyan = active) while it is open
-  function drawLatch(cx, title, bit, dispBit, open) {
-    const { boxW, boxH } = g, x0 = cx - boxW / 2, y0 = g.schMid - boxH / 2;
-    ctx.save();
-    ctx.fillStyle = C.panel2;
-    if (open) { ctx.shadowColor = C.accent; ctx.shadowBlur = 16; }
-    roundRect(x0, y0, boxW, boxH, 10); ctx.fill();
-    ctx.strokeStyle = open ? C.accent : C.border; ctx.lineWidth = open ? 2.4 : 1.5;
-    roundRect(x0, y0, boxW, boxH, 10); ctx.stroke();
-    ctx.restore();
-    label(title, cx, y0 + boxH * 0.2, C.muted, clamp(boxH * 0.11, 10, 13));
-    label("D-latch", cx, y0 + boxH * 0.82, C.muted, clamp(boxH * 0.085, 8, 11));
-    // the value this latch currently holds
-    label(String(bit), cx, g.schMid + boxH * 0.02, hot(dispBit), clamp(boxH * 0.34, 20, 34));
-  }
-  function roundRect(x, y, w, h, r) {
+  function nandPath(x0, cy, bw, bh) {          // AND body (flat back, round nose)
+    const r = bh / 2;
     ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    ctx.moveTo(x0, cy - r);
+    ctx.lineTo(x0 + bw - r, cy - r);
+    ctx.arc(x0 + bw - r, cy, r, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x0, cy + r);
+    ctx.closePath();
+  }
+  function drawGate(id) {
+    const [cx, cy] = g.pos[id], { bw, bh, br } = g, x0 = cx - bw / 2, v = dv[id], hi = v > 0.5, edge = hi ? C.sin : C.border;
+    ctx.save();
+    nandPath(x0, cy, bw, bh);
+    ctx.fillStyle = mix(C.panel2, C.sin, v * 0.22); ctx.fill();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 12; }
+    ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.2 : 1.4; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+    const bx = x0 + bw + br;                    // NAND inversion bubble
+    ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2 : 1.4;
+    ctx.beginPath(); ctx.arc(bx, cy, br, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
   }
 
   function drawLamp(x, y, valBit, dispVal, text, bar) {
     const r = g.lampR, on = dispVal > 0.5;
     ctx.save();
-    if (on) { ctx.shadowColor = C.sin; ctx.shadowBlur = 20; }
+    if (on) { ctx.shadowColor = C.sin; ctx.shadowBlur = 18; }
     ctx.fillStyle = mix(C.panel2, C.sin, dispVal); ctx.strokeStyle = on ? C.sin : C.muted; ctx.lineWidth = 2.4;
     ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
     label(valBit ? "1" : "0", x, y, on ? C.aink : C.muted, r * 0.85);
-    label(text, x, y + r + 15, hot(dispVal), 12);
-    if (bar) { const w = 7; ctx.strokeStyle = hot(dispVal); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - w, y + r + 8); ctx.lineTo(x + w, y + r + 8); ctx.stroke(); }
+    label(text, x, y + r + 14, hot(dispVal), 12);
+    if (bar) { const w = 7; ctx.strokeStyle = hot(dispVal); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - w, y + r + 7); ctx.lineTo(x + w, y + r + 7); ctx.stroke(); }
   }
 
   function drawSchematic() {
-    const { schMid, boxW, boxH, br, masterX, slaveX, lampR, dX, qX, dY, qY, qbarY,
-      clkX, clkY, clkRailY } = g;
-    const mL = masterX - boxW / 2, mR = masterX + boxW / 2;
-    const sL = slaveX - boxW / 2, sR = slaveX + boxW / 2;
-    const enY = schMid + boxH / 2;                 // enable enters bottom of each box
-    const masterOpen = clk === 0, slaveOpen = clk === 1;
+    for (const L of links) wire(routeOf(L), srcVal(L.s));
+    // output taps: Q, Q-bar wires leave the latch gates
+    wire([outP("n5"), [g.pos.Q[0] - g.lampR, outP("n5")[1]]], dv.n5);
+    wire([outP("n6"), [g.pos.Qb[0] - g.lampR, outP("n6")[1]]], dv.n6);
 
-    // data path: D → master → slave → Q
-    wire([[dX + lampR, dY], [mL, dY], [mL, schMid]], dd);
-    wire([[mR, schMid], [sL, schMid]], dm);
-    wire([[sR, schMid], [qX - lampR, qY]], dq);
-    wire([[sR, schMid], [qX - lampR, qbarY]], dqbar);
+    // junction dots where a gate output fans out to more than one place
+    for (const id of ["n2", "n3", "n4", "n5", "n6"]) { const p = outP(id); dot(p[0], p[1], 3.2, hot(dv[id]), dv[id] > 0.5 ? 6 : 0); }
 
-    // clock rail along the bottom, rising into each latch's enable
-    wire([[clkX + lampR, clkY], [clkX + lampR, clkRailY], [slaveX, clkRailY], [slaveX, enY + br * 2]], dclk);
-    // slave enable = clock (direct)
-    wire([[slaveX, enY + br * 2], [slaveX, enY]], dclk);
-    // master enable = NOT clock (bubble on its riser)
-    wire([[masterX, clkRailY], [masterX, enY + br * 2 + br]], dclk);
-    ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = dclk > 0.5 ? C.sin : C.border; ctx.lineWidth = 1.8;
-    ctx.beginPath(); ctx.arc(masterX, enY + br + br, br, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
-    wire([[masterX, enY + br], [masterX, enY]], clk ? 0 : 1);
-    dot(masterX, clkRailY, 3.5, hot(dclk), dclk > 0.5 ? 6 : 0);
+    for (const id of ids) drawGate(id);
 
-    drawLatch(masterX, "MASTER", m, dm, masterOpen);
-    drawLatch(slaveX, "SLAVE", q, dq, slaveOpen);
-
-    drawLamp(dX, dY, d, dd, "D");
-    drawLamp(clkX, clkY, clk, dclk, "CLK");
-    drawLamp(qX, qY, q, dq, "Q");
-    drawLamp(qX, qbarY, qbar, dqbar, "Q", true);
+    drawLamp(g.pos.D[0], g.pos.D[1], d, dd, "D");
+    drawLamp(g.pos.CLK[0], g.pos.CLK[1], clk, dclk, "CLK");
+    drawLamp(g.pos.Q[0], g.pos.Q[1], o.n5, dv.n5, "Q");
+    drawLamp(g.pos.Qb[0], g.pos.Qb[1], o.n6, dv.n6, "Q", true);
   }
 
-  // ---- timing diagram ----
   function drawTiming() {
     const { tTop, tBot, tL, tR } = g;
-    const lanes = [
-      { key: "clk", name: "CLK", col: C.accent },
-      { key: "d", name: "D", col: C.sin },
-      { key: "q", name: "Q", col: C.sin },
-    ];
+    const lanes = [{ key: "clk", name: "CLK", col: C.accent }, { key: "d", name: "D", col: C.sin }, { key: "q", name: "Q", col: C.sin }];
     const laneH = (tBot - tTop) / lanes.length;
     const xAt = (i) => lerp(tL, tR, i / (maxSamples - 1));
 
-    // faint vertical guides at each rising clock edge — the moments Q can change
-    ctx.save(); ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
-    for (let i = 1; i < hist.length; i++) {
-      if (hist[i].clk === 1 && hist[i - 1].clk === 0) {
-        const x = xAt(i); ctx.beginPath(); ctx.moveTo(x, tTop + 6); ctx.lineTo(x, tBot - 6); ctx.stroke();
-      }
+    ctx.save(); ctx.strokeStyle = C.grid; ctx.lineWidth = 1;      // rising-edge guides
+    for (let i = 1; i < hist.length; i++) if (hist[i].clk === 1 && hist[i - 1].clk === 0) {
+      const x = xAt(i); ctx.beginPath(); ctx.moveTo(x, tTop + 6); ctx.lineTo(x, tBot - 6); ctx.stroke();
     }
     ctx.restore();
 
     lanes.forEach((lane, li) => {
       const top = tTop + li * laneH, hiY = top + laneH * 0.28, loY = top + laneH * 0.72;
-      ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(tL, loY); ctx.lineTo(tR, loY); ctx.stroke();
+      ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(tL, loY); ctx.lineTo(tR, loY); ctx.stroke();
       label(lane.name, tL - 10, (hiY + loY) / 2, C.muted, 12, "right");
-
       if (hist.length > 1) {
-        ctx.save();
-        ctx.strokeStyle = lane.col; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.lineCap = "round";
-        ctx.beginPath();
-        let py = hist[0][lane.key] ? hiY : loY;
-        ctx.moveTo(xAt(0), py);
-        for (let i = 1; i < hist.length; i++) {
-          const x = xAt(i), y = hist[i][lane.key] ? hiY : loY;
-          if (y !== py) ctx.lineTo(x, py);      // vertical transition first
-          ctx.lineTo(x, y);
-          py = y;
-        }
+        ctx.save(); ctx.strokeStyle = lane.col; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.beginPath(); let py = hist[0][lane.key] ? hiY : loY; ctx.moveTo(xAt(0), py);
+        for (let i = 1; i < hist.length; i++) { const x = xAt(i), y = hist[i][lane.key] ? hiY : loY; if (y !== py) ctx.lineTo(x, py); ctx.lineTo(x, y); py = y; }
         ctx.stroke(); ctx.restore();
       }
     });
   }
 
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    drawSchematic();
-    drawTiming();
-  }
+  function draw() { ctx.clearRect(0, 0, W, H); drawSchematic(); drawTiming(); }
 
-  function updateStatus() {
-    const el = $("status");
-    el.textContent = "Q = " + q;
-    el.classList.toggle("hi", q === 1);
-  }
+  function updateStatus() { const el = $("status"); el.textContent = "Q = " + o.n5; el.classList.toggle("hi", o.n5 === 1); }
 
   let last = performance.now();
   function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
@@ -346,23 +362,16 @@
     b.className = "switch";
     b.innerHTML = '<span class="name">D</span><span class="track"><span class="thumb"></span></span><span class="val">0</span>';
     b.onclick = () => { d = d ? 0 : 1; syncInputs(); };
-    host.appendChild(b);
-    syncInputs();
+    host.appendChild(b); syncInputs();
   }
-  function syncInputs() {
-    const b = $("inputs").firstChild;
-    if (!b) return;
-    b.classList.toggle("on", d === 1);
-    b.querySelector(".val").textContent = d ? "1" : "0";
-  }
+  function syncInputs() { const b = $("inputs").firstChild; if (!b) return; b.classList.toggle("on", d === 1); b.querySelector(".val").textContent = d ? "1" : "0"; }
 
   function buildMode() {
     const host = $("mode"); host.innerHTML = "";
     [["auto", "Auto clock"], ["manual", "Manual clock"]].forEach(([id, txt]) => {
       const b = document.createElement("button");
-      b.textContent = txt; b.dataset.mode = id;
-      b.classList.toggle("on", id === mode);
-      b.onclick = () => { mode = id; if (mode === "manual") { manualClk = clk; } buildClkCtrl(); syncMode(); };
+      b.textContent = txt; b.dataset.mode = id; b.classList.toggle("on", id === mode);
+      b.onclick = () => { mode = id; if (mode === "manual") manualClk = clk; buildClkCtrl(); syncMode(); };
       host.appendChild(b);
     });
   }
@@ -371,8 +380,7 @@
   function buildClkCtrl() {
     const host = $("clk-ctrl"); host.innerHTML = "";
     if (mode === "auto") {
-      const box = document.createElement("label"); box.className = "rng";
-      box.innerHTML = '<span>slow</span>';
+      const box = document.createElement("label"); box.className = "rng"; box.innerHTML = "<span>slow</span>";
       const r = document.createElement("input");
       r.type = "range"; r.min = "0"; r.max = "100"; r.value = String(speed);
       r.oninput = () => { speed = Number(r.value); };
@@ -380,8 +388,7 @@
       const fast = document.createElement("span"); fast.textContent = "fast"; box.appendChild(fast);
       host.appendChild(box);
     } else {
-      const b = document.createElement("button");
-      b.className = "switch";
+      const b = document.createElement("button"); b.className = "switch";
       b.innerHTML = '<span class="name">CLK</span><span class="track"><span class="thumb"></span></span><span class="val">0</span>';
       const sync = () => { b.classList.toggle("on", manualClk === 1); b.querySelector(".val").textContent = manualClk ? "1" : "0"; };
       b.onclick = () => { manualClk = manualClk ? 0 : 1; sync(); };
@@ -390,7 +397,8 @@
   }
 
   $("reset-btn").onclick = () => {
-    d = 0; m = 0; q = 0; qbar = 1; manualClk = 0; clk = 0; clkAcc = 0;
+    d = 0; manualClk = 0; clk = 0; clkAcc = 0;
+    o.n1 = 1; o.n2 = 1; o.n3 = 1; o.n4 = 1; o.n5 = 0; o.n6 = 1;
     hist.length = 0; syncInputs(); buildClkCtrl();
   };
   $("theme-btn").onclick = () => {

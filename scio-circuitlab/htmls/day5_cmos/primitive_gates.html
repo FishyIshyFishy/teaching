@@ -258,21 +258,29 @@
     label(b.type === "p" ? "PMOS" : "NMOS", b.x, top - 11, C.muted, 11);
   }
 
-  // gate connection: a short stub out the left of each transistor, labelled with its input.
+  // gate connection: a labelled input terminal wired to each transistor's gate.
+  // the terminal is a lamp that lights amber when its input is 1, so the input points read at a glance.
   // PMOS carries the inversion bubble → it turns on when the gate is LOW. Colour tracks the input value.
   function drawGate(b) {
-    const col = mix(C.muted, C.sin, inputEase(b.input));
-    const gx = b.x - g.boxW / 2;
-    let stubStart = gx;
+    const v = inputEase(b.input), hi = inputValue(b.input) === 1;
+    const col = mix(C.muted, C.sin, v);
+    const gx = b.x - g.boxW / 2;             // gate terminal on the transistor box
+    const padR = 13, padX = gx - 44 - padR;  // the input point, well clear of the box
+
+    // wire from the input point into the gate
+    line(padX + padR, b.y, gx, b.y, col, 2.6);
+    // PMOS inversion bubble at the gate (drawn over the wire so it reads as the gate connection)
     if (b.type === "p") {
       const r = 8;
       ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = col; ctx.lineWidth = 2.4;
       ctx.beginPath(); ctx.arc(gx - r, b.y, r, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
-      stubStart = gx - 2 * r;
     }
-    const stubEnd = stubStart - 15;
-    line(stubStart, b.y, stubEnd, b.y, col, 2.4);
-    label(b.input, stubEnd - 11, b.y, col, 13, "right");
+    // the input point itself: a labelled terminal lamp
+    ctx.save();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 18; }
+    ctx.fillStyle = mix(C.panel2, C.sin, v); ctx.strokeStyle = hi ? C.sin : C.muted; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.arc(padX, b.y, padR, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    label(b.input, padX, b.y, hi ? C.aink : C.ink, 14);
   }
 
   function draw() {
