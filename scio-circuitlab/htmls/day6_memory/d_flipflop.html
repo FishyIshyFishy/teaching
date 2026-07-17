@@ -1,4 +1,4 @@
-<title>D flip-flop — the gates</title>
+<title>Gated D latch — the gates</title>
 <style>
   :root {
     --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
@@ -50,7 +50,7 @@
   .seg button.on { color: var(--accent-ink); background: var(--accent); }
 
   .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
-  canvas { display: block; width: 100%; height: clamp(520px, 74vw, 720px); }
+  canvas { display: block; width: 100%; height: clamp(500px, 70vw, 700px); }
 
   .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 22px; padding: 2px; }
   .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; }
@@ -79,14 +79,14 @@
 <div class="wrap">
   <div class="shell">
     <div class="bar">
-      <span class="eyebrow">D flip-flop · six NAND gates</span>
+      <span class="eyebrow">Gated D latch · transparent when CLK = 1</span>
       <div class="bar-right">
         <span class="pill" id="status">Q = 0</span>
         <button class="icon-btn" id="theme-btn" title="Toggle light / dark">◐</button>
       </div>
     </div>
 
-    <div class="stage"><canvas id="scene" aria-label="A positive-edge-triggered D flip-flop built from six cross-coupled NAND gates, with D and clock inputs and Q / Q-bar outputs. Below the schematic, a scrolling timing diagram shows the clock, D, and Q, so Q is seen to sample D only on each rising clock edge."></canvas></div>
+    <div class="stage"><canvas id="scene" aria-label="A gated D latch: an inverter and two NAND gates steer D and its complement into a cross-coupled NAND SR latch, gated by the clock. Below the schematic, a scrolling timing diagram shows the clock, D, and Q — Q follows D while the clock is high and holds while it is low."></canvas></div>
 
     <div class="deck">
       <div class="inputs" id="inputs"></div>
@@ -119,59 +119,31 @@
 
   const nand = (...a) => (a.every((x) => x) ? 0 : 1);
 
-  // ---- the flip-flop, as six NAND gates -----------------------------------
-  // A positive-edge-triggered D flip-flop is six NAND gates wired in three
-  // cross-coupled pairs. Each gate's inputs are the OUTPUTS of other gates (and
-  // D / the clock) — so there is no "first" gate to evaluate in order. As with
-  // the SR latch, we settle the whole tangle by iterating every gate equation
-  // to a steady state each frame. The edge-triggering is not coded anywhere; it
-  // simply falls out of how the gates feed one another.
-  const gate = {
-    n1: ["n2", "n4"],
-    n2: ["n1", "CLK"],
-    n3: ["n2", "CLK", "n4"],
-    n4: ["n3", "D"],
-    n5: ["n2", "n6"],        // Q
-    n6: ["n5", "n3"],        // Q-bar
-  };
-  const ids = ["n1", "n2", "n3", "n4", "n5", "n6"];
-
-  // every wire in the picture: {from, to, port, route-kind + channels}
-  // kinds — fwd: out→[vx]→in ; wrapT/wrapB: feedback over top / under bottom ;
-  //         gapU/gapD: cross-couple through the pair's gap (like the SR latch).
-  const links = [
-    { s: "n1", t: "n2", k: 0, kind: "fwd", vx: 0.40 },
-    { s: "n2", t: "n1", k: 0, kind: "wrapT", yc: 0.055, rx: 0.245 },
-    { s: "n2", t: "n3", k: 0, kind: "gapL", vx: 0.55, yc: 0.305, rx: 0.435 },
-    { s: "n2", t: "n5", k: 0, kind: "fwd", vx: 0.60 },
-    { s: "n4", t: "n1", k: 1, kind: "wrapT", yc: 0.032, rx: 0.205 },
-    { s: "n4", t: "n3", k: 2, kind: "fwd", vx: 0.42 },
-    { s: "CLK", t: "n2", k: 1, kind: "clk" },
-    { s: "CLK", t: "n3", k: 1, kind: "clk" },
-    { s: "n3", t: "n4", k: 0, kind: "wrapB", yc: 0.55, rx: 0.245 },
-    { s: "n3", t: "n6", k: 1, kind: "fwd", vx: 0.635 },
-    { s: "D", t: "n4", k: 1, kind: "din" },
-    { s: "n5", t: "n6", k: 0, kind: "gapD", yc: 0.30, dd: 0.05, rx: 0.665 },
-    { s: "n6", t: "n5", k: 1, kind: "gapU", yc: 0.30, dd: 0.05, rx: 0.685 },
-  ];
-
-  // ---- state ---------------------------------------------------------------
+  // ---- the gated D latch, as gates ----------------------------------------
+  // An inverter makes D-bar. Two front NANDs, both gated by the clock, turn D
+  // and D-bar into set/reset pulses — but only while CLK = 1. Those feed a
+  // cross-coupled NAND pair (the SR latch, gates nQ / nQbar) that remembers.
+  //   nA = NAND(D, CLK)         nQ    = NAND(nA, nQbar)   = Q
+  //   nB = NAND(D-bar, CLK)     nQbar = NAND(nB, nQ)      = Q-bar
+  // While CLK = 1 the latch is transparent (Q follows D); while CLK = 0 both
+  // front NANDs sit at 1 and the pair holds. Nothing computes Q from a formula:
+  // it falls out of the cross-coupled gates, settled iteratively each frame.
   let d = 0, clk = 0;
-  const o = { n1: 1, n2: 1, n3: 1, n4: 1, n5: 0, n6: 1 };   // gate outputs (state)
-  const dv = { n1: 1, n2: 1, n3: 1, n4: 1, n5: 0, n6: 1 };  // eased display values
+  const o = { nInv: 1, nA: 1, nB: 1, nQ: 0, nQbar: 1 };   // gate outputs (state)
+  const dv = { nInv: 1, nA: 1, nB: 1, nQ: 0, nQbar: 1 };  // eased display values
   let dd = 0, dclk = 0;
+  const gateIds = ["nA", "nB", "nQ", "nQbar"];
 
   let mode = "auto", speed = 55, manualClk = 0, clkAcc = 0;
   const hist = []; const maxSamples = 260; let sampAcc = 0; const sampInt = 0.03;
 
   function settle() {
-    for (let it = 0; it < 24; it++) {
-      o.n1 = nand(o.n2, o.n4);
-      o.n2 = nand(o.n1, clk);
-      o.n3 = nand(o.n2, clk, o.n4);
-      o.n4 = nand(o.n3, d);
-      o.n5 = nand(o.n2, o.n6);
-      o.n6 = nand(o.n5, o.n3);
+    o.nInv = d ? 0 : 1;
+    o.nA = nand(d, clk);
+    o.nB = nand(o.nInv, clk);
+    for (let it = 0; it < 12; it++) {          // settle the cross-coupled output pair
+      o.nQ = nand(o.nA, o.nQbar);
+      o.nQbar = nand(o.nB, o.nQ);
     }
   }
 
@@ -185,24 +157,25 @@
     settle();
 
     sampAcc += dt;
-    while (sampAcc >= sampInt) { sampAcc -= sampInt; hist.push({ clk, d, q: o.n5 }); if (hist.length > maxSamples) hist.shift(); }
+    while (sampAcc >= sampInt) { sampAcc -= sampInt; hist.push({ clk, d, q: o.nQ }); if (hist.length > maxSamples) hist.shift(); }
 
     const e = 1 - Math.pow(0.006, dt);
     dd += (d - dd) * e; dclk += (clk - dclk) * e;
-    for (const id of ids) dv[id] += (o[id] - dv[id]) * e;
+    for (const id in dv) dv[id] += (o[id] - dv[id]) * e;
   }
 
-  const srcVal = (name) => (name === "CLK" ? dclk : name === "D" ? dd : dv[name]);
+  const srcVal = (name) => (name === "CLK" ? dclk : name === "D" ? dd : name === "INV" ? dv.nInv : dv[name]);
 
   // ---- canvas + layout -----------------------------------------------------
   const cv = $("scene");
   let ctx, W, H, DPR, g = {};
 
-  // gate centres and lamps as fractions of the schematic — nudge here to tune.
+  // gate centres / lamps as fractions of the canvas — nudge here to tune.
   const place = {
-    n1: [0.31, 0.13], n2: [0.49, 0.20], n3: [0.49, 0.41], n4: [0.31, 0.48],
-    n5: [0.72, 0.22], n6: [0.72, 0.38],
-    D: [0.06, 0.50], CLK: [0.06, 0.12], Q: [0.93, 0.22], Qb: [0.93, 0.38],
+    D: [0.10, 0.115], INV: [0.235, 0.30], CLK: [0.10, 0.50],
+    nA: [0.44, 0.13], nB: [0.44, 0.48],
+    nQ: [0.63, 0.21], nQbar: [0.63, 0.40],
+    Q: [0.91, 0.21], Qb: [0.91, 0.40],
   };
 
   function fit() {
@@ -211,39 +184,48 @@
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-    const bw = clamp(W * 0.08, 56, 84), bh = clamp(H * 0.06, 36, 54), br = clamp(bh * 0.15, 4, 7);
+    const bw = clamp(W * 0.075, 54, 82), bh = clamp(H * 0.058, 34, 50), br = clamp(bh * 0.15, 4, 7);
     const pos = {};
     for (const key in place) pos[key] = [place[key][0] * W, place[key][1] * H];
     g = {
       bw, bh, br, pos,
+      invW: clamp(bh * 1.0, 30, 48), invH: clamp(bh * 1.2, 40, 58), ibr: clamp(bh * 0.14, 4, 6),
       lampR: clamp(W * 0.024, 15, 21),
-      xclk: 0.15 * W,
-      tTop: 0.64 * H, tBot: 0.955 * H, tL: 0.14 * W, tR: 0.96 * W,
+      xjc: 0.31 * W,                                   // clock junction / riser
+      tTop: 0.63 * H, tBot: 0.955 * H, tL: 0.14 * W, tR: 0.96 * W,
     };
   }
 
-  // ---- gate ports ----
+  // ---- gate ports (all front/latch NANDs are 2-input) ----
   const hw = () => g.bw / 2;
   function outP(id) { const [x, y] = g.pos[id]; return [x + hw() + 2 * g.br, y]; }
-  function inP(id, k) {
-    const [x, y] = g.pos[id], n = gate[id].length, off = g.bh * 0.26;
-    let dy = n === 1 ? 0 : n === 2 ? (k === 0 ? -off : off) : (k - 1) * g.bh * 0.32;
-    return [x - hw(), y + dy];
-  }
+  function inP(id, k) { const [x, y] = g.pos[id], off = g.bh * 0.26; return [x - hw(), y + (k === 0 ? -off : off)]; }
+  const invTop = () => [g.pos.INV[0], g.pos.INV[1] - g.invH / 2];
+  const invOut = () => [g.pos.INV[0], g.pos.INV[1] + g.invH / 2 + 2 * g.ibr];
 
-  // build the pixel polyline for one link
+  // every wire, matching the reference diagram
+  const links = [
+    { s: "D", t: "nA", k: 0, kind: "dTop" },      // D → top-left NAND (top input)
+    { s: "D", kind: "dInv" },                     // D branch down into the inverter
+    { s: "INV", t: "nB", k: 0, kind: "invB" },    // D-bar → bottom-left NAND
+    { s: "CLK", t: "nA", k: 1, kind: "clkA" },    // clock → both front NANDs
+    { s: "CLK", t: "nB", k: 1, kind: "clkB" },
+    { s: "nA", t: "nQ", k: 0, kind: "fwd" },
+    { s: "nB", t: "nQbar", k: 1, kind: "fwd" },
+    { s: "nQ", t: "nQbar", k: 0, kind: "cross" },  // the X: Q → Q-bar gate
+    { s: "nQbar", t: "nQ", k: 1, kind: "cross" },  //        Q-bar → Q gate
+  ];
+
   function routeOf(L) {
-    const stub = 0.014 * W;
-    const to = inP(L.t, L.k);
-    if (L.kind === "fwd") { const o0 = outP(L.s), vx = L.vx * W; return [o0, [vx, o0[1]], [vx, to[1]], to]; }
-    if (L.kind === "clk") { const cl = g.pos.CLK; return [[cl[0] + g.lampR, cl[1]], [g.xclk, cl[1]], [g.xclk, to[1]], to]; }
-    if (L.kind === "din") { const dl = g.pos.D; return [[dl[0] + g.lampR, to[1]], to]; }
-    if (L.kind === "wrapT") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, L.yc * H], [L.rx * W, L.yc * H], [L.rx * W, to[1]], to]; }
-    if (L.kind === "wrapB") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, L.yc * H], [L.rx * W, L.yc * H], [L.rx * W, to[1]], to]; }
-    if (L.kind === "gapL") { const o0 = outP(L.s); return [o0, [L.vx * W, o0[1]], [L.vx * W, L.yc * H], [L.rx * W, L.yc * H], [L.rx * W, to[1]], to]; }
-    if (L.kind === "gapD") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, (L.yc - L.dd) * H], [L.rx * W, (L.yc - L.dd) * H], [L.rx * W, to[1]], to]; }
-    if (L.kind === "gapU") { const o0 = outP(L.s); return [o0, [o0[0] + stub, o0[1]], [o0[0] + stub, (L.yc + L.dd) * H], [L.rx * W, (L.yc + L.dd) * H], [L.rx * W, to[1]], to]; }
-    return [outP(L.s), to];
+    const stub = 0.016 * W, Dy = g.pos.D[1], INVx = g.pos.INV[0], xjc = g.xjc, cl = g.pos.CLK;
+    if (L.kind === "dTop") return [[g.pos.D[0] + g.lampR, Dy], [INVx, Dy], inP("nA", 0)];
+    if (L.kind === "dInv") return [[INVx, Dy], invTop()];
+    if (L.kind === "invB") { const io = invOut(); return [io, [io[0], inP("nB", 0)[1]], inP("nB", 0)]; }
+    if (L.kind === "clkA") return [[cl[0] + g.lampR, cl[1]], [xjc, cl[1]], [xjc, inP("nA", 1)[1]], inP("nA", 1)];
+    if (L.kind === "clkB") return [[xjc, cl[1]], [xjc, inP("nB", 1)[1]], inP("nB", 1)];
+    if (L.kind === "fwd") { const s = outP(L.s), e = inP(L.t, L.k), vx = (s[0] + e[0]) / 2; return [s, [vx, s[1]], [vx, e[1]], e]; }
+    if (L.kind === "cross") { const s = outP(L.s); return [s, [s[0] + stub, s[1]], inP(L.t, L.k)]; }  // short stub then a diagonal → the X
+    return [outP(L.s), inP(L.t, L.k)];
   }
 
   // ---- drawing helpers ----
@@ -276,11 +258,9 @@
   function nandPath(x0, cy, bw, bh) {          // AND body (flat back, round nose)
     const r = bh / 2;
     ctx.beginPath();
-    ctx.moveTo(x0, cy - r);
-    ctx.lineTo(x0 + bw - r, cy - r);
+    ctx.moveTo(x0, cy - r); ctx.lineTo(x0 + bw - r, cy - r);
     ctx.arc(x0 + bw - r, cy, r, -Math.PI / 2, Math.PI / 2);
-    ctx.lineTo(x0, cy + r);
-    ctx.closePath();
+    ctx.lineTo(x0, cy + r); ctx.closePath();
   }
   function drawGate(id) {
     const [cx, cy] = g.pos[id], { bw, bh, br } = g, x0 = cx - bw / 2, v = dv[id], hi = v > 0.5, edge = hi ? C.sin : C.border;
@@ -290,9 +270,23 @@
     if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 12; }
     ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.2 : 1.4; ctx.lineJoin = "round"; ctx.stroke();
     ctx.restore();
-    const bx = x0 + bw + br;                    // NAND inversion bubble
+    const bx = x0 + bw + br;
     ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2 : 1.4;
     ctx.beginPath(); ctx.arc(bx, cy, br, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+
+  // downward-pointing inverter (matches the diagram): D in at top, D-bar out below
+  function drawInverter() {
+    const [cx, cy] = g.pos.INV, { invW, invH, ibr } = g, v = dv.nInv, hi = v > 0.5, edge = hi ? C.sin : C.border;
+    const top = cy - invH / 2, bot = cy + invH / 2;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(cx - invW / 2, top); ctx.lineTo(cx + invW / 2, top); ctx.lineTo(cx, bot); ctx.closePath();
+    ctx.fillStyle = mix(C.panel2, C.sin, v * 0.22); ctx.fill();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 12; }
+    ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.2 : 1.4; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+    ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2 : 1.4;
+    ctx.beginPath(); ctx.arc(cx, bot + ibr, ibr, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
   }
 
   function drawLamp(x, y, valBit, dispVal, text, bar) {
@@ -308,19 +302,22 @@
 
   function drawSchematic() {
     for (const L of links) wire(routeOf(L), srcVal(L.s));
-    // output taps: Q, Q-bar wires leave the latch gates
-    wire([outP("n5"), [g.pos.Q[0] - g.lampR, outP("n5")[1]]], dv.n5);
-    wire([outP("n6"), [g.pos.Qb[0] - g.lampR, outP("n6")[1]]], dv.n6);
+    wire([outP("nQ"), [g.pos.Q[0] - g.lampR, outP("nQ")[1]]], dv.nQ);        // Q output tap
+    wire([outP("nQbar"), [g.pos.Qb[0] - g.lampR, outP("nQbar")[1]]], dv.nQbar);
 
-    // junction dots where a gate output fans out to more than one place
-    for (const id of ["n2", "n3", "n4", "n5", "n6"]) { const p = outP(id); dot(p[0], p[1], 3.2, hot(dv[id]), dv[id] > 0.5 ? 6 : 0); }
+    // junction dots where a signal fans out
+    dot(g.pos.INV[0], g.pos.D[1], 3.2, hot(dd), dd > 0.5 ? 6 : 0);            // D branch
+    dot(g.xjc, g.pos.CLK[1], 3.2, hot(dclk), dclk > 0.5 ? 6 : 0);            // CLK branch
+    dot(outP("nQ")[0], outP("nQ")[1], 3.2, hot(dv.nQ), dv.nQ > 0.5 ? 6 : 0);
+    dot(outP("nQbar")[0], outP("nQbar")[1], 3.2, hot(dv.nQbar), dv.nQbar > 0.5 ? 6 : 0);
 
-    for (const id of ids) drawGate(id);
+    drawInverter();
+    for (const id of gateIds) drawGate(id);
 
     drawLamp(g.pos.D[0], g.pos.D[1], d, dd, "D");
     drawLamp(g.pos.CLK[0], g.pos.CLK[1], clk, dclk, "CLK");
-    drawLamp(g.pos.Q[0], g.pos.Q[1], o.n5, dv.n5, "Q");
-    drawLamp(g.pos.Qb[0], g.pos.Qb[1], o.n6, dv.n6, "Q", true);
+    drawLamp(g.pos.Q[0], g.pos.Q[1], o.nQ, dv.nQ, "Q");
+    drawLamp(g.pos.Qb[0], g.pos.Qb[1], o.nQbar, dv.nQbar, "Q", true);
   }
 
   function drawTiming() {
@@ -329,7 +326,7 @@
     const laneH = (tBot - tTop) / lanes.length;
     const xAt = (i) => lerp(tL, tR, i / (maxSamples - 1));
 
-    ctx.save(); ctx.strokeStyle = C.grid; ctx.lineWidth = 1;      // rising-edge guides
+    ctx.save(); ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
     for (let i = 1; i < hist.length; i++) if (hist[i].clk === 1 && hist[i - 1].clk === 0) {
       const x = xAt(i); ctx.beginPath(); ctx.moveTo(x, tTop + 6); ctx.lineTo(x, tBot - 6); ctx.stroke();
     }
@@ -349,8 +346,7 @@
   }
 
   function draw() { ctx.clearRect(0, 0, W, H); drawSchematic(); drawTiming(); }
-
-  function updateStatus() { const el = $("status"); el.textContent = "Q = " + o.n5; el.classList.toggle("hi", o.n5 === 1); }
+  function updateStatus() { const el = $("status"); el.textContent = "Q = " + o.nQ; el.classList.toggle("hi", o.nQ === 1); }
 
   let last = performance.now();
   function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
@@ -398,7 +394,7 @@
 
   $("reset-btn").onclick = () => {
     d = 0; manualClk = 0; clk = 0; clkAcc = 0;
-    o.n1 = 1; o.n2 = 1; o.n3 = 1; o.n4 = 1; o.n5 = 0; o.n6 = 1;
+    o.nInv = 1; o.nA = 1; o.nB = 1; o.nQ = 0; o.nQbar = 1;
     hist.length = 0; syncInputs(); buildClkCtrl();
   };
   $("theme-btn").onclick = () => {
