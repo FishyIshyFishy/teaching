@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny CPU Challenge</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --pc: #e3b341; --acc: #3fc5e6; --alu: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #57c98a; --lock: #6b7a84;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --pc: #b9821f; --acc: #1298bf; --alu: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+    --ok: #2f9e63; --lock: #9aa8b0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: clamp(14px, 2.4vw, 30px); }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 1.15rem; margin: 4px 0 0; font-weight: 600; }
+  .who { display: flex; align-items: center; gap: 10px; }
+  #name { font-family: var(--mono); font-size: .82rem; background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; width: 170px; }
+  #name:focus { outline: none; border-color: var(--accent); }
+
+  .cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: .78rem; font-family: var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+
+  /* progress strip */
+  .progress { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .dot { font-family: var(--mono); font-size: .72rem; color: var(--muted); border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  .dot.current { border-color: var(--accent); color: var(--ink); }
+  .dot.done { background: color-mix(in srgb, var(--ok) 20%, var(--panel)); border-color: var(--ok); color: var(--ink); }
+  .dot .tick { color: var(--ok); font-weight: 700; }
+  .cleared { font-family: var(--mono); font-size: .74rem; color: var(--muted); margin-left: auto; }
+
+  /* memory grid */
+  .mem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+  .cell { position: relative; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px; transition: border-color .12s, background .12s; }
+  .cell .addr { font-family: var(--mono); font-size: .62rem; color: var(--muted); letter-spacing: .08em; display: flex; justify-content: space-between; }
+  .cell .tag { font-size: .58rem; font-weight: 700; letter-spacing: .06em; }
+  .cell .tag.in { color: var(--pc); } .cell .tag.out { color: var(--acc); }
+  .cell input { width: 100%; background: transparent; border: 0; color: var(--ink); font-family: var(--mono); font-size: 1.05rem; padding: 1px 0; text-align: left; }
+  .cell input:focus { outline: none; }
+  .cell .decode { font-family: var(--mono); font-size: .6rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; min-height: .8em; }
+  .cell.at-pc { border-color: var(--pc); background: color-mix(in srgb, var(--pc) 12%, var(--panel-2)); }
+  .cell.touched { border-color: var(--acc); }
+  .cell.locked { background: color-mix(in srgb, var(--lock) 12%, var(--panel-2)); border-style: dashed; }
+  .cell.locked input { color: var(--muted); }
+  .cell.lock-in { border-color: color-mix(in srgb, var(--pc) 45%, var(--border)); }
+  .cell.lock-out { border-color: color-mix(in srgb, var(--acc) 45%, var(--border)); }
+
+  /* task panel */
+  .tasknav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .tasknav select { flex: 1; }
+  .btn.nav { padding: 6px 12px; font-size: 1rem; line-height: 1; }
+  .spec { font-family: var(--mono); font-size: .82rem; color: var(--ink); margin-bottom: 6px; }
+  .goal { font-size: .9rem; color: var(--ink); margin-bottom: 10px; }
+  .goal .hint { color: var(--muted); font-size: .82rem; }
+  .par { font-family: var(--mono); font-size: .74rem; color: var(--pc); }
+
+  /* result panel */
+  .result { text-align: center; }
+  .verdict { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+  .verdict.pass { color: var(--ok); } .verdict.fail { color: var(--alu); }
+  .reason { font-size: .8rem; color: var(--muted); margin-top: 4px; min-height: 1em; }
+  .metrics { display: flex; justify-content: center; gap: 26px; margin: 14px 0 6px; }
+  .metric { font-family: var(--mono); }
+  .metric .k { font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .metric .v { font-size: 1.5rem; }
+  .metric .p { font-size: .72rem; color: var(--muted); }
+  .metric .star { color: var(--pc); }
+  .verify { font-family: var(--mono); font-size: .78rem; color: var(--muted); margin-top: 8px; min-height: 1em; }
+  .verify b { color: var(--acc); letter-spacing: .1em; }
+
+  /* processor */
+  .regs { display: flex; flex-direction: column; gap: 10px; }
+  .reg { display: flex; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .reg .name { font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; color: var(--muted); }
+  .reg .val { font-family: var(--mono); font-size: 1.35rem; }
+  .reg.pc .val { color: var(--pc); } .reg.acc .val { color: var(--acc); }
+  .phase { display: flex; gap: 6px; margin: 12px 0 4px; }
+  .phase span { flex: 1; text-align: center; font-family: var(--mono); font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 4px; border: 1px solid var(--border); border-radius: 6px; }
+  .phase span.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+  .status { font-family: var(--mono); font-size: .74rem; color: var(--muted); min-height: 1.1em; margin-top: 10px; }
+  .status.halt { color: var(--alu); }
+
+  .deck { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; align-items: center; }
+  .btn { font-family: var(--mono); font-size: .8rem; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 9px 15px; border-radius: 8px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  select, input[type="range"] { font-family: var(--mono); }
+  select { background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: .8rem; }
+  .speed { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+
+  .ref table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .74rem; }
+  .ref td { padding: 3px 6px; border-bottom: 1px solid var(--border); }
+  .ref td:first-child { color: var(--accent); width: 3.2em; }
+  .ref td:nth-child(2) { color: var(--ink); width: 5em; }
+  .ref td:last-child { color: var(--muted); }
+  .ref .rule { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin: 0 0 10px; }
+  .ref .rule b { color: var(--pc); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <div>
+      <div class="eyebrow">Course finale · Challenge</div>
+      <h1>Tiny CPU Challenge</h1>
+    </div>
+    <div class="who">
+      <input id="name" placeholder="your name" autocomplete="off" spellcheck="false">
+      <button class="btn" id="theme">Light / dark</button>
+    </div>
+  </div>
+
+  <div class="progress" id="progress"></div>
+
+  <div class="cols">
+    <div class="panel">
+      <h2>Memory — 16 cells (write your program in the free cells)</h2>
+      <div class="mem" id="mem"></div>
+    </div>
+
+    <div class="side">
+      <div class="panel task">
+        <div class="tasknav">
+          <button class="btn nav" id="prev" title="Previous task">‹</button>
+          <select id="tasksel"></select>
+          <button class="btn nav" id="next" title="Next task">›</button>
+        </div>
+        <div class="spec" id="spec"></div>
+        <div class="goal" id="goal"></div>
+        <div class="par" id="par"></div>
+      </div>
+
+      <div class="panel result">
+        <div class="verdict" id="verdict">Not checked</div>
+        <div class="reason" id="reason">Write a program, then press Check.</div>
+        <div class="metrics" id="metrics"></div>
+        <div class="verify" id="verify"></div>
+      </div>
+
+      <div class="panel">
+        <h2>The processor</h2>
+        <div class="regs">
+          <div class="reg pc"><span class="name">PC · next cell</span><span class="val" id="pc">0</span></div>
+          <div class="reg acc"><span class="name">ACC · working number</span><span class="val" id="acc">0</span></div>
+        </div>
+        <div class="phase" id="phase">
+          <span data-p="fetch">Fetch</span><span data-p="decode">Decode</span><span data-p="execute">Execute</span>
+        </div>
+        <div class="status" id="status">Ready. Write a program, then Check.</div>
+      </div>
+
+      <div class="panel ref">
+        <h2>Instruction set</h2>
+        <p class="rule">A cell's number decodes as <b>op × 16 + address</b>. A blank (0) cell means <b>HALT</b>.</p>
+        <table>
+          <tr><td>0</td><td>HALT</td><td>stop the program</td></tr>
+          <tr><td>1</td><td>LOAD a</td><td>acc = mem[a]</td></tr>
+          <tr><td>2</td><td>STORE a</td><td>mem[a] = acc</td></tr>
+          <tr><td>3</td><td>ADD a</td><td>acc = acc + mem[a]</td></tr>
+          <tr><td>4</td><td>SUB a</td><td>acc = acc − mem[a]</td></tr>
+          <tr><td>5</td><td>JUMP a</td><td>go to cell a</td></tr>
+          <tr><td>6</td><td>JMPZ a</td><td>if acc = 0, go to cell a</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="deck">
+    <button class="btn primary" id="check">Check</button>
+    <button class="btn" id="step">Step</button>
+    <button class="btn" id="run">Run</button>
+    <button class="btn" id="reset">Reset</button>
+    <span class="speed">slow <input type="range" id="speed" min="120" max="1100" value="620" step="10"> fast</span>
+  </div>
+</div>
+
+<script>
+"use strict";
+const memSize = 16;
+const stepCap = 2000;
+
+// Each task: the input cells (locked, filled from case 1), the output cell
+// (locked, starts 0), a battery of test cases, and a goal predicate. size par /
+// speed par were locked by simulating a reference solution (speed on case 1).
+const tasks = [
+  { name: "Copy", inputs: [15], output: 14, parSize: 2, parSpeed: 2,
+    spec: "cell 15 holds a number.",
+    goal: "Copy it into cell 14.",
+    cases: [{15:7}, {15:3}, {15:12}],
+    ok: (m,c) => m[14] === c[15] },
+
+  { name: "Add two", inputs: [14,15], output: 13, parSize: 3, parSpeed: 3,
+    spec: "cells 14 and 15 hold two numbers.",
+    goal: "Put their sum in cell 13.",
+    cases: [{14:5,15:6}, {14:3,15:2}, {14:8,15:1}],
+    ok: (m,c) => m[13] === c[14] + c[15] },
+
+  { name: "Sum four", inputs: [12,13,14,15], output: 11, parSize: 5, parSpeed: 5,
+    spec: "cells 12–15 hold four numbers.",
+    goal: "Put their total in cell 11.",
+    cases: [{12:1,13:2,14:3,15:4}, {12:5,13:5,14:5,15:5}, {12:9,13:0,14:2,15:7}],
+    ok: (m,c) => m[11] === c[12] + c[13] + c[14] + c[15] },
+
+  { name: "Difference", inputs: [14,15], output: 13, parSize: 3, parSpeed: 3,
+    spec: "cell 14 = A, cell 15 = B  (B ≥ A).",
+    goal: "Put B − A in cell 13.",
+    cases: [{14:3,15:9}, {14:4,15:4}, {14:1,15:12}],
+    ok: (m,c) => m[13] === c[15] - c[14] },
+
+  { name: "Triple it", inputs: [15], output: 14, parSize: 4, parSpeed: 4,
+    spec: "cell 15 holds a number.",
+    goal: "Put three times it in cell 14.",
+    cases: [{15:4}, {15:1}, {15:7}],
+    ok: (m,c) => m[14] === 3 * c[15] },
+
+  { name: "Multiply", inputs: [14,15], output: 13, parSize: 10, parSpeed: 29,
+    spec: "cell 14 = A, cell 15 = B.",
+    goal: "Put A × B in cell 13.",
+    hint: "add A to itself B times — you'll need a loop.",
+    cases: [{14:4,15:3}, {14:7,15:2}, {14:5,15:5}],
+    ok: (m,c) => m[13] === c[14] * c[15] },
+
+  { name: "Divide", inputs: [14,15], output: 13, parSize: 9, parSpeed: 34,
+    spec: "cell 14 = A, cell 15 = B.  B divides A evenly.",
+    goal: "Put A ÷ B in cell 13.",
+    hint: "count how many times you can subtract B before you hit 0.",
+    cases: [{14:12,15:3}, {14:10,15:5}, {14:9,15:3}],
+    ok: (m,c) => m[13] === c[14] / c[15] },
+
+  { name: "★ Square (bonus)", inputs: [15], output: 14, parSize: 12, parSpeed: 40,
+    spec: "cell 15 holds a number.",
+    goal: "Put it squared in cell 14.",
+    hint: "a number times itself — reuse your Multiply idea.",
+    cases: [{15:4}, {15:6}, {15:3}],
+    ok: (m,c) => m[14] === c[15] * c[15] },
+];
+
+const names = { 0: "HALT", 1: "LOAD", 2: "STORE", 3: "ADD", 4: "SUB", 5: "JUMP", 6: "JMPZ" };
+
+// Split a stored number into an operation and an address (same rule as the lab).
+function decode(value) {
+  const op = Math.floor(value / 16);
+  const addr = ((value % 16) + 16) % 16;
+  const name = names[op];
+  if (!name) return { op, addr, name: "data", text: String(value) };
+  const text = op === 0 ? "HALT" : `${name} ${addr}`;
+  return { op, addr, name, text };
+}
+
+// Carry out one decoded instruction on a memory array; returns the next PC.
+function execute(mem, pc, acc, op, addr) {
+  if (op === 1) return { acc: mem[addr], pc: pc + 1 };
+  if (op === 2) { mem[addr] = acc; return { acc, pc: pc + 1 }; }
+  if (op === 3) return { acc: acc + mem[addr], pc: pc + 1 };
+  if (op === 4) return { acc: acc - mem[addr], pc: pc + 1 };
+  if (op === 5) return { acc, pc: addr };
+  if (op === 6) return { acc, pc: acc === 0 ? addr : pc + 1 };
+  return { acc, pc: -1 }; // HALT / data
+}
+
+// Run a fresh memory to completion. Used only by Check — never touches the display.
+function runHeadless(mem, cap = stepCap) {
+  let pc = 0, acc = 0, steps = 0;
+  while (steps < cap) {
+    const value = mem[pc];
+    const { op, addr, name } = decode(value);
+    if (op === 0 || name === "data" || value === undefined) return { halted: true, steps, mem, acc };
+    steps++;
+    ({ acc, pc } = execute(mem, pc, acc, op, addr));
+    if (pc < 0) return { halted: true, steps, mem, acc };
+  }
+  return { halted: false, steps, mem, acc };
+}
+
+// ---- state ----
+const state = { idx: 0, mem: [], pc: 0, acc: 0, halted: false, touched: -1 };
+const programs = {};            // authored free-cell values, per task, kept across the session
+const passed = {};              // task index -> true once cleared
+const results = {};             // task index -> last Check result (for the panel)
+
+function task() { return tasks[state.idx]; }
+function lockedSet(t) { return new Set([t.output, ...t.inputs]); }
+function isFree(t, i) { return !lockedSet(t).has(i); }
+
+function makeTemplate(t) {
+  const arr = Array(memSize).fill(0);
+  const c0 = t.cases[0];
+  for (const cell of t.inputs) arr[cell] = c0[cell];
+  arr[t.output] = 0;
+  return arr;
+}
+
+// Build a runnable memory: authored program + this case's inputs + cleared output.
+function buildMem(t, program, caseObj) {
+  const m = program.slice();
+  for (const cell of t.inputs) m[cell] = caseObj[cell];
+  m[t.output] = 0;
+  return m;
+}
+
+function sizeOf(t, program) {
+  let n = 0;
+  for (let i = 0; i < memSize; i++) if (isFree(t, i) && program[i] !== 0) n++;
+  return n;
+}
+
+// FNV-1a 32-bit, formatted XXXX-XXXX. Deters editing a screenshot, not a forger.
+function hashCode(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const hex = (h >>> 0).toString(16).toUpperCase().padStart(8, "0");
+  return hex.slice(0, 4) + "-" + hex.slice(4);
+}
+
+function loadTask(idx) {
+  stopRun();
+  state.idx = idx;
+  const t = task();
+  if (!programs[idx]) programs[idx] = makeTemplate(t);
+  state.mem = buildMem(t, programs[idx], t.cases[0]);
+  state.pc = 0; state.acc = 0; state.halted = false; state.touched = -1;
+  setStatus("Write a program, then Check.", false);
+  buildMemory();
+  renderTaskPanel();
+  render();
+}
+
+function buildMemory() {
+  const t = task();
+  const host = document.getElementById("mem");
+  host.innerHTML = "";
+  state.mem.forEach((value, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cell"; cell.id = "cell" + i;
+    const locked = !isFree(t, i);
+    const isIn = t.inputs.includes(i), isOut = i === t.output;
+    if (locked) cell.classList.add("locked", isOut ? "lock-out" : "lock-in");
+    const tag = isOut ? `<span class="tag out">OUT</span>` : isIn ? `<span class="tag in">IN</span>` : "";
+    cell.innerHTML = `<div class="addr"><span>CELL ${i}</span>${tag}</div>`;
+    const input = document.createElement("input");
+    input.value = value; input.inputMode = "numeric";
+    if (locked) {
+      input.readOnly = true;
+    } else {
+      input.addEventListener("change", () => {
+        const n = parseInt(input.value, 10);
+        const v = Number.isNaN(n) ? 0 : n;
+        programs[state.idx][i] = v;
+        state.mem[i] = v;
+        state.pc = 0; state.acc = 0; state.halted = false; state.touched = -1;
+        clearResult();
+        render();
+      });
+    }
+    const decodeEl = document.createElement("div");
+    decodeEl.className = "decode";
+    cell.appendChild(input); cell.appendChild(decodeEl);
+    host.appendChild(cell);
+  });
+}
+
+function render() {
+  const t = task();
+  document.getElementById("pc").textContent = state.pc;
+  document.getElementById("acc").textContent = state.acc;
+  state.mem.forEach((value, i) => {
+    const cell = document.getElementById("cell" + i);
+    if (!cell) return;
+    const input = cell.querySelector("input");
+    if (document.activeElement !== input) input.value = value;
+    // locked input/output cells read as data, not instructions
+    const dec = cell.querySelector(".decode");
+    if (i === t.output) dec.textContent = "output";
+    else if (t.inputs.includes(i)) dec.textContent = "input";
+    else dec.textContent = decode(value).text;
+    cell.classList.toggle("at-pc", i === state.pc && !state.halted);
+    cell.classList.toggle("touched", i === state.touched);
+  });
+  const active = state.halted ? "" : "execute";
+  document.getElementById("phase").querySelectorAll("span")
+    .forEach((s) => s.classList.toggle("on", s.dataset.p === active));
+  renderProgress();
+  renderResult();
+}
+
+function renderTaskPanel() {
+  const t = task();
+  document.getElementById("spec").textContent = "Given: " + t.spec;
+  const hint = t.hint ? ` <span class="hint">(${t.hint})</span>` : "";
+  document.getElementById("goal").innerHTML = "<b>Goal:</b> " + t.goal + hint;
+  document.getElementById("par").textContent = `par · size ${t.parSize} · speed ${t.parSpeed}`;
+  document.getElementById("tasksel").value = String(state.idx);
+}
+
+function renderProgress() {
+  const host = document.getElementById("progress");
+  host.innerHTML = "";
+  tasks.forEach((t, i) => {
+    const d = document.createElement("button");
+    d.className = "dot" + (i === state.idx ? " current" : "") + (passed[i] ? " done" : "");
+    const label = t.name.replace("★ ", "").replace(" (bonus)", "");
+    d.innerHTML = (passed[i] ? '<span class="tick">✓</span> ' : "") + label;
+    d.onclick = () => loadTask(i);
+    host.appendChild(d);
+  });
+  const n = Object.keys(passed).filter((k) => passed[k]).length;
+  const tally = document.createElement("span");
+  tally.className = "cleared";
+  tally.textContent = `cleared ${n} / ${tasks.length}`;
+  host.appendChild(tally);
+}
+
+function clearResult() { delete results[state.idx]; }
+
+function renderResult() {
+  const r = results[state.idx];
+  const verdict = document.getElementById("verdict");
+  const reason = document.getElementById("reason");
+  const metrics = document.getElementById("metrics");
+  const verify = document.getElementById("verify");
+  if (!r) {
+    verdict.textContent = "Not checked"; verdict.className = "verdict";
+    reason.textContent = "Write a program, then press Check.";
+    metrics.innerHTML = ""; verify.innerHTML = "";
+    return;
+  }
+  verdict.textContent = r.pass ? "PASS" : "FAIL";
+  verdict.className = "verdict " + (r.pass ? "pass" : "fail");
+  reason.textContent = r.reason;
+  const t = task();
+  const speedVal = r.speed == null ? "∞" : r.speed;
+  const sizeStar = r.size <= t.parSize ? '<span class="star">★</span>' : "";
+  const speedStar = r.speed != null && r.speed <= t.parSpeed ? '<span class="star">★</span>' : "";
+  metrics.innerHTML =
+    `<div class="metric"><div class="k">size</div><div class="v">${r.size} ${sizeStar}</div><div class="p">par ${t.parSize}</div></div>` +
+    `<div class="metric"><div class="k">speed</div><div class="v">${speedVal} ${speedStar}</div><div class="p">par ${t.parSpeed}</div></div>`;
+  verify.innerHTML = r.pass ? `verify code &nbsp;<b>${r.verify}</b>` : "";
+}
+
+function checkTask() {
+  stopRun();
+  const t = task();
+  const program = programs[state.idx];
+  const size = sizeOf(t, program);
+
+  let allPass = true, anyStalled = false, speed = null;
+  t.cases.forEach((c, idx) => {
+    const r = runHeadless(buildMem(t, program, c));
+    if (idx === 0) speed = r.halted ? r.steps : null;
+    if (!r.halted) { anyStalled = true; allPass = false; return; }
+    if (!t.ok(r.mem, c)) allPass = false;
+  });
+
+  let reason;
+  if (allPass) reason = "Correct on all tests. Nice.";
+  else if (anyStalled) reason = "Your program never stopped (over " + stepCap + " steps) — check for an infinite loop.";
+  else reason = "Runs, but the answer is wrong on at least one test.";
+
+  const name = document.getElementById("name").value.trim() || "anon";
+  const progStr = program.map((v, i) => (isFree(t, i) ? v : "-")).join(",");
+  const verify = hashCode([t.name, name, progStr, size, speed, allPass].join("|"));
+
+  results[state.idx] = { pass: allPass, size, speed, reason, verify };
+  if (allPass) passed[state.idx] = true;
+
+  // show the clean authored program (case 1) so the screenshot is tidy
+  state.mem = buildMem(t, program, t.cases[0]);
+  state.pc = 0; state.acc = 0; state.halted = false; state.touched = -1;
+  setStatus(allPass ? "PASS — screenshot this for submission." : "Not yet — keep going.", !allPass);
+  render();
+}
+
+// ---- interactive watching (mutates the displayed memory; Reset restores) ----
+function stepOnce() {
+  if (state.halted) return;
+  const value = state.mem[state.pc];
+  const { op, addr, name, text } = decode(value);
+  if (op === 0 || name === "data" || value === undefined) {
+    state.halted = true;
+    setStatus(op === 0 ? "HALT — program finished." : `Cell ${state.pc} isn't an instruction. Stopped.`, true);
+    render();
+    return;
+  }
+  state.touched = (op >= 1 && op <= 4) ? addr : -1;
+  const nxt = execute(state.mem, state.pc, state.acc, op, addr);
+  state.acc = nxt.acc;
+  setStatus(`Ran cell ${state.pc}: ${text}`, false);
+  if (nxt.pc < 0) { state.halted = true; } else { state.pc = nxt.pc; }
+  render();
+}
+
+function setStatus(msg, halt) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.classList.toggle("halt", !!halt);
+}
+
+let timer = null;
+function stopRun() {
+  if (timer) { clearInterval(timer); timer = null; document.getElementById("run").textContent = "Run"; }
+}
+function toggleRun() {
+  if (timer) { stopRun(); return; }
+  document.getElementById("run").textContent = "Pause";
+  const period = 1220 - parseInt(document.getElementById("speed").value, 10);
+  timer = setInterval(() => {
+    stepOnce();
+    if (state.halted) stopRun();
+  }, period);
+}
+
+function resetWatch() {
+  stopRun();
+  const t = task();
+  state.mem = buildMem(t, programs[state.idx], t.cases[0]);
+  state.pc = 0; state.acc = 0; state.halted = false; state.touched = -1;
+  setStatus("Reset to your program.", false);
+  render();
+}
+
+// ---- wiring ----
+document.getElementById("check").onclick = checkTask;
+document.getElementById("step").onclick = () => { stopRun(); stepOnce(); };
+document.getElementById("run").onclick = toggleRun;
+document.getElementById("reset").onclick = resetWatch;
+document.getElementById("prev").onclick = () => loadTask((state.idx - 1 + tasks.length) % tasks.length);
+document.getElementById("next").onclick = () => loadTask((state.idx + 1) % tasks.length);
+document.getElementById("name").addEventListener("input", () => { clearResult(); renderResult(); });
+document.getElementById("theme").onclick = () => {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+};
+
+const sel = document.getElementById("tasksel");
+tasks.forEach((t, i) => {
+  const o = document.createElement("option");
+  o.value = String(i); o.textContent = `Task ${i + 1} / ${tasks.length} — ${t.name}`;
+  sel.appendChild(o);
+});
+sel.onchange = (e) => loadTask(parseInt(e.target.value, 10));
+
+loadTask(0);
+</script>
+</body>
+</html>
