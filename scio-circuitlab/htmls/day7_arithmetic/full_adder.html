@@ -1,0 +1,498 @@
+<title>Binary adder — logic becomes arithmetic</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --ok: #1f9d57;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c; --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff; --ok: #1f9d57;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; padding: clamp(14px, 2.4vw, 34px); -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  .bar-right { display: flex; align-items: center; gap: 12px; }
+  .pill { font-family: var(--mono); font-size: .82rem; letter-spacing: .1em; font-weight: 600; padding: 7px 15px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--panel-2); white-space: nowrap; }
+  .pill.hi { color: var(--accent-ink); background: var(--sig-in); border-color: transparent; }
+  .icon-btn { font-family: var(--mono); font-size: .95rem; line-height: 1; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--ink); }
+
+  /* segmented control — picks the 1-bit block or the 4-bit machine built from it */
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 3px; gap: 2px; }
+  .seg button { font-family: var(--mono); font-size: .82rem; letter-spacing: .06em; color: var(--muted); background: transparent; border: 0; padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { color: var(--accent-ink); background: var(--accent); }
+
+  .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  canvas { display: block; width: 100%; height: clamp(420px, 58vw, 560px); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; padding: 2px; }
+  .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+
+  /* one toggle per bit; a labelled group keeps the A / B rows readable */
+  .bitgroup { display: flex; align-items: center; gap: 10px; }
+  .rowlab { font-family: var(--mono); font-weight: 600; letter-spacing: .1em; color: var(--muted); width: 1.4ch; }
+  .inputs { display: flex; flex-wrap: wrap; gap: 10px; }
+  .switch { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 8px 12px 8px 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 11px; }
+  .switch:hover { border-color: var(--accent); }
+  .switch .name { font-weight: 600; color: var(--muted); }
+  .switch.on .name { color: var(--sig-in); }
+  .switch .track { width: 34px; height: 18px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); position: relative; transition: background .15s, border-color .15s; }
+  .switch .thumb { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: left .15s, background .15s; }
+  .switch.on .track { background: var(--sig-in); border-color: transparent; }
+  .switch.on .thumb { left: 17px; background: var(--accent-ink); }
+  .switch .val { min-width: 1ch; text-align: center; color: var(--muted); }
+  .switch.on .val { color: var(--sig-in); }
+  .switch.mini { padding: 7px 10px 7px 12px; gap: 9px; }
+
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow" id="eyebrow">1-bit full adder</span>
+      <div class="bar-right">
+        <div class="seg" id="seg">
+          <button data-view="FA" class="on">1-bit block</button>
+          <button data-view="ADD4">4-bit adder</button>
+        </div>
+        <span class="pill" id="status">0 + 0 = 0</span>
+        <button class="icon-btn" id="theme-btn" title="Toggle light / dark">◐</button>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="A binary adder. In the 1-bit view, three inputs A, B and carry-in feed a network of XOR, AND and OR gates that produce a sum bit and a carry-out bit. In the 4-bit view, four such blocks are chained so the carry ripples from the lowest bit up to the highest."></canvas></div>
+
+    <div class="deck" id="deck"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), sc: g("--sig-c"), accent: g("--accent"),
+      aink: g("--accent-ink"), ok: g("--ok"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---- the one arithmetic fact everything is built on -----------------------
+  // 1 + 1 = 2 = "10": a single bit can't hold the answer, so every column spits
+  // out a carry into the next. A full adder is the block that takes two bits AND
+  // a carry-in and produces a sum bit plus a carry-out. Nothing below knows the
+  // answer — the sum and carry fall out of the gate wiring / the block chain.
+  const truth = {
+    XOR: (v) => v[0] ^ v[1],
+    AND: (v) => v[0] & v[1],
+    OR:  (v) => v[0] | v[1],
+  };
+
+  // one full adder, expressed as its five gates (two half-adders + an OR)
+  function fullAdder(a, b, cin) {
+    const x1 = truth.XOR([a, b]);        // first half-adder sum
+    const a1 = truth.AND([a, b]);        // first half-adder carry
+    const s  = truth.XOR([x1, cin]);     // sum bit
+    const a2 = truth.AND([x1, cin]);     // second half-adder carry
+    const co = truth.OR([a1, a2]);       // either carry -> carry-out
+    return { x1, a1, s, a2, co, sum: s, cout: co };
+  }
+
+  // ---- the 1-bit full adder as a gate-level diagram -------------------------
+  // fx/fy are fractions of the canvas; gates list their inputs by id so the
+  // shared node (the first XOR feeds both the sum and the second carry) stays a
+  // single gate instead of being duplicated. The sum path sits along the top,
+  // the carry path along the bottom, so the two halves don't tangle.
+  const faParts = [
+    { id: "A",   kind: "in",  fx: 0.06, fy: 0.14, text: "A" },
+    { id: "B",   kind: "in",  fx: 0.06, fy: 0.30, text: "B" },
+    { id: "Cin", kind: "in",  fx: 0.06, fy: 0.66, text: "Cin" },
+    { id: "x1",  kind: "gate", type: "XOR", ins: ["A", "B"],    fx: 0.34, fy: 0.16 },
+    { id: "a1",  kind: "gate", type: "AND", ins: ["A", "B"],    fx: 0.34, fy: 0.50 },
+    { id: "s",   kind: "gate", type: "XOR", ins: ["x1", "Cin"], fx: 0.60, fy: 0.22 },
+    { id: "a2",  kind: "gate", type: "AND", ins: ["x1", "Cin"], fx: 0.60, fy: 0.66 },
+    { id: "co",  kind: "gate", type: "OR",  ins: ["a1", "a2"],  fx: 0.80, fy: 0.60 },
+    { id: "Sum",  kind: "out", src: "s",  fx: 0.93, fy: 0.22, text: "SUM" },
+    { id: "Cout", kind: "out", src: "co", fx: 0.93, fy: 0.60, text: "CARRY" },
+  ];
+  const faById = Object.fromEntries(faParts.map((p) => [p.id, p]));
+  const faGates = faParts.filter((p) => p.kind === "gate");
+
+  // each wire runs on its own vertical channel (ch, a fraction of width) sitting
+  // in the gap between two columns — so no wire runs collinear with another and
+  // none crosses through a gate body. Shared source id = a clean fan-out bus.
+  const faWires = [
+    { from: "A",   to: "x1", k: 0, ch: 0.185 },
+    { from: "B",   to: "x1", k: 1, ch: 0.235 },
+    { from: "A",   to: "a1", k: 0, ch: 0.185 },
+    { from: "B",   to: "a1", k: 1, ch: 0.235 },
+    { from: "x1",  to: "s",  k: 0, ch: 0.45 },
+    { from: "x1",  to: "a2", k: 0, ch: 0.45 },
+    { from: "Cin", to: "s",  k: 1, ch: 0.50 },
+    { from: "Cin", to: "a2", k: 1, ch: 0.50 },
+    { from: "a1",  to: "co", k: 0, ch: 0.70 },
+    { from: "a2",  to: "co", k: 1, ch: 0.72 },
+    { from: "s",   to: "Sum",  k: 0 },
+    { from: "co",  to: "Cout", k: 0 },
+  ];
+
+  function evalFA(A, B, Cin) {
+    const v = { A, B, Cin };
+    for (const g of faGates) v[g.id] = truth[g.type](g.ins.map((r) => v[r]));
+    return v;
+  }
+  const faValue = (p, v) => (p.kind === "in" ? v[p.id] : p.kind === "out" ? v[p.src] : v[p.id]);
+
+  // ---- state ----------------------------------------------------------------
+  let view = "FA";
+  const fa = { A: 0, B: 0, Cin: 0 };
+  const dispFA = {};                                   // eased display value per FA part
+
+  const aBits = [0, 0, 0, 0], bBits = [0, 0, 0, 0];    // index 0 = least significant bit
+  let cin0 = 0;
+  const cinDisp = [0, 0, 0, 0], coutDisp = [0, 0, 0, 0], sumDisp = [0, 0, 0, 0];
+
+  function evalAdd4() {
+    const blocks = []; let carry = cin0;
+    for (let k = 0; k < 4; k++) {
+      const r = fullAdder(aBits[k], bBits[k], carry);
+      blocks[k] = { a: aBits[k], b: bBits[k], cin: carry, sum: r.sum, cout: r.cout };
+      carry = r.cout;
+    }
+    return { blocks, finalCout: carry };
+  }
+  const bitsToNum = (bits) => bits.reduce((n, b, k) => n + b * (1 << k), 0);
+
+  function seedDisp() {
+    if (view === "FA") {
+      const v = evalFA(fa.A, fa.B, fa.Cin);
+      for (const p of faParts) dispFA[p.id] = faValue(p, v);
+    } else {
+      const L = evalAdd4();
+      for (let k = 0; k < 4; k++) { cinDisp[k] = L.blocks[k].cin; coutDisp[k] = L.blocks[k].cout; sumDisp[k] = L.blocks[k].sum; }
+    }
+  }
+
+  // ---- canvas + layout ------------------------------------------------------
+  const cv = $("scene");
+  let ctx, W, H, DPR, lay = {};
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    computeLayout();
+  }
+  function computeLayout() {
+    if (view === "FA") {
+      const bw = clamp(W * 0.085, 58, 96), bh = clamp(H * 0.14, 46, 74);
+      lay = { bw, bh, lampR: clamp(W * 0.026, 15, 22), r: bh * 0.5 };
+      for (const p of faParts) { p.x = p.fx * W; p.y = p.fy * H; }
+    } else {
+      const bw = clamp(W * 0.135, 92, 140), bh = clamp(H * 0.32, 118, 172);
+      lay = {
+        bw, bh, by: H * 0.44, lampR: clamp(W * 0.023, 14, 19), small: clamp(W * 0.018, 12, 16),
+        abY: H * 0.12, sumY: H * 0.86,
+      };
+      lay.blockX = (k) => lerp(W * 0.27, W * 0.79, (3 - k) / 3);          // bit 3 (MSB) on the left
+      lay.coutX = lay.blockX(3) - bw / 2 - clamp(W * 0.055, 42, 70);      // final carry-out, far left
+      lay.cinX  = lay.blockX(0) + bw / 2 + clamp(W * 0.055, 42, 70);      // external carry-in, far right
+    }
+  }
+
+  // ---- drawing helpers (shared) ---------------------------------------------
+  const mix = (a, b, t) => {
+    t = clamp(t, 0, 1);
+    const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const pa = p(a.length === 7 ? a : "#888888"), pb = p(b.length === 7 ? b : "#888888");
+    return `rgb(${Math.round(lerp(pa[0], pb[0], t))},${Math.round(lerp(pa[1], pb[1], t))},${Math.round(lerp(pa[2], pb[2], t))})`;
+  };
+  const hot = (v) => mix(C.muted, C.sin, v);        // a value paints its wire from grey (0) to amber (1)
+  const label = (txt, x, y, col, size, align) => {
+    ctx.fillStyle = col; ctx.font = "600 " + (size || 12) + "px " + mono;
+    ctx.textAlign = align || "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+  };
+  const dot = (x, y, r, col, glow) => {
+    ctx.save(); if (glow) { ctx.shadowColor = col; ctx.shadowBlur = glow; }
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore();
+  };
+  // orthogonal wire (out -> mid -> in), lit by the value it carries
+  function drawWire(s, e, v, midX) {
+    const col = hot(v); if (midX == null) midX = (s.x + e.x) / 2;
+    ctx.save();
+    ctx.globalAlpha = lerp(0.5, 1, v);
+    ctx.shadowColor = col; ctx.shadowBlur = lerp(0, 12, v);
+    ctx.strokeStyle = col; ctx.lineWidth = lerp(2.2, 3.8, v); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y); ctx.lineTo(midX, s.y); ctx.lineTo(midX, e.y); ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawLamp(x, y, dispVal, text, r) {
+    r = r || lay.lampR; const on = dispVal > 0.5;
+    ctx.save();
+    if (on) { ctx.shadowColor = C.sin; ctx.shadowBlur = 20; }
+    ctx.fillStyle = mix(C.panel2, C.sin, dispVal); ctx.strokeStyle = on ? C.sin : C.muted; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    label(on ? "1" : "0", x, y, on ? C.aink : C.muted, r * 0.85);
+    if (text) label(text, x, y + r + 14, hot(dispVal), 12);
+  }
+
+  // distinctive gate silhouette, nose pointing right
+  function gatePath(type, x0, cy, bw, bh) {
+    const r = bh / 2;
+    ctx.beginPath();
+    if (type === "AND") {                       // flat back, semicircular nose
+      ctx.moveTo(x0, cy - r); ctx.lineTo(x0 + bw - r, cy - r);
+      ctx.arc(x0 + bw - r, cy, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(x0, cy + r); ctx.closePath();
+    } else {                                     // OR / XOR — curved shield
+      ctx.moveTo(x0, cy - r);
+      ctx.quadraticCurveTo(x0 + bw * 0.62, cy - r, x0 + bw, cy);
+      ctx.quadraticCurveTo(x0 + bw * 0.62, cy + r, x0, cy + r);
+      ctx.quadraticCurveTo(x0 + bw * 0.3, cy, x0, cy - r);
+      ctx.closePath();
+    }
+  }
+  function drawGate(p) {
+    const v = dispFA[p.id], { bw, bh } = lay, x0 = p.x - bw / 2, hi = v > 0.5, edge = hi ? C.sin : C.border;
+    ctx.save();
+    gatePath(p.type, x0, p.y, bw, bh);
+    ctx.fillStyle = mix(C.panel2, C.sin, v * 0.22); ctx.fill();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 14; }
+    ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.4 : 1.5; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+    if (p.type === "XOR") {                       // the extra back-curve that marks an XOR
+      ctx.save(); ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.4 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x0 - 6, p.y - bh / 2);
+      ctx.quadraticCurveTo(x0 - 6 + bw * 0.3, p.y, x0 - 6, p.y + bh / 2);
+      ctx.stroke(); ctx.restore();
+    }
+    label(p.type, x0 + bw * (p.type === "AND" ? 0.42 : 0.46), p.y, C.ink, clamp(bh * 0.2, 9, 12));
+  }
+
+  // ports for the gate diagram
+  const faPortOut = (p) => (p.kind === "gate" ? { x: p.x + lay.bw / 2, y: p.y } : { x: p.x + lay.lampR, y: p.y });
+  function faPortIn(p, k) {
+    if (p.kind === "out") return { x: p.x - lay.lampR, y: p.y };
+    const x0 = p.x - lay.bw / 2;
+    if (p.ins.length === 1) return { x: x0, y: p.y };
+    return { x: x0, y: p.y + (k === 0 ? -1 : 1) * lay.bh * 0.24 };
+  }
+
+  function drawFA() {
+    // wires under the gates — each on its own channel, so nothing overlaps
+    for (const w of faWires) {
+      const src = faById[w.from], dst = faById[w.to];
+      drawWire(faPortOut(src), faPortIn(dst, w.k), dispFA[w.from], w.ch != null ? w.ch * W : null);
+    }
+    // solder dot where each source leaves its block (reads fan-out at a glance)
+    for (const p of faParts) if (p.kind !== "out") { const q = faPortOut(p); dot(q.x, q.y, 3.5, hot(dispFA[p.id]), dispFA[p.id] > 0.5 ? 8 : 0); }
+    // gates, then input / output lamps
+    for (const p of faGates) drawGate(p);
+    for (const p of faParts) if (p.kind === "in") drawLamp(p.x, p.y, dispFA[p.id], p.text);
+    for (const p of faParts) if (p.kind === "out") drawLamp(p.x, p.y, dispFA[p.src], p.text);
+  }
+
+  // a small triangle marking flow direction into a port (dir = -1 points left)
+  function drawArrow(x, y, dir, v) {
+    const col = hot(v), a = 8;
+    ctx.save();
+    ctx.globalAlpha = lerp(0.55, 1, v);
+    if (v > 0.5) { ctx.shadowColor = col; ctx.shadowBlur = 10; }
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x - dir * a, y - a * 0.68); ctx.lineTo(x - dir * a, y + a * 0.68); ctx.closePath();
+    ctx.fill(); ctx.restore();
+  }
+  // a carry hop: the wire plus an arrowhead at its destination end
+  function drawCarry(s, e, v) {
+    drawWire(s, e, v);
+    drawArrow(e.x, e.y, Math.sign(e.x - s.x) || -1, v);
+  }
+
+  // one 4-bit block: a labelled full-adder box — three inputs (A, B, Cin), two
+  // outputs (SUM, Cout). Every block is identical; only the wiring differs.
+  function drawAddBlock(k) {
+    const bx = lay.blockX(k), by = lay.by, { bw, bh } = lay, x0 = bx - bw / 2, y0 = by - bh / 2;
+    const live = coutDisp[k] > 0.5 || sumDisp[k] > 0.5, edge = live ? C.sin : C.border;
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(x0, y0, bw, bh, 12);
+    ctx.fillStyle = C.panel2; ctx.fill();
+    if (live) { ctx.shadowColor = C.sin; ctx.shadowBlur = 12; }
+    ctx.strokeStyle = edge; ctx.lineWidth = live ? 2.2 : 1.4; ctx.stroke();
+    ctx.restore();
+    const topY = y0 + 16, botY = y0 + bh - 15;
+    label("A", bx - bw * 0.26, topY, C.muted, 11);            // input ports, labelled at each edge
+    label("bit " + k, bx, topY, C.sin, 11);
+    label("B", bx + bw * 0.26, topY, C.muted, 11);
+    label("Cout", x0 + 9, by, C.muted, 10, "left");
+    label("+", bx, by, C.ink, clamp(bh * 0.28, 20, 32));
+    label("Cin", x0 + bw - 9, by, C.muted, 10, "right");
+    label("SUM", bx, botY, C.muted, 11);
+  }
+
+  function drawAdd4() {
+    const { bw, bh, by, abY, sumY, lampR } = lay;
+    // the carry chain: each block's Cout (left edge) drives the next block's Cin (right edge).
+    // bits ripple from bit 0 (right) up to bit 3 (left), so the carry arrows point left.
+    for (let k = 0; k < 3; k++) {
+      drawCarry({ x: lay.blockX(k) - bw / 2, y: by }, { x: lay.blockX(k + 1) + bw / 2, y: by }, coutDisp[k]);
+    }
+    drawCarry({ x: lay.cinX - lampR, y: by }, { x: lay.blockX(0) + bw / 2, y: by }, cinDisp[0]);   // external carry-in
+    // final carry-out drops down to sit as the top bit of the result row
+    drawWire({ x: lay.blockX(3) - bw / 2, y: by }, { x: lay.coutX, y: sumY - lampR }, coutDisp[3], lay.coutX);
+
+    for (let k = 0; k < 4; k++) {
+      const bx = lay.blockX(k), ax = bx - bw * 0.26, bxb = bx + bw * 0.26;
+      drawWire({ x: ax, y: abY }, { x: ax, y: by - bh / 2 }, aBits[k]);          // A drops in
+      drawWire({ x: bxb, y: abY }, { x: bxb, y: by - bh / 2 }, bBits[k]);        // B drops in
+      drawWire({ x: bx, y: by + bh / 2 }, { x: bx, y: sumY - lampR }, sumDisp[k]);  // SUM drops out
+    }
+    for (let k = 0; k < 4; k++) drawAddBlock(k);
+    // input lamps above each block, sum lamps below (the result reads left to right)
+    for (let k = 0; k < 4; k++) {
+      const bx = lay.blockX(k);
+      drawLamp(bx - bw * 0.26, abY, aBits[k], null, lay.small);
+      drawLamp(bx + bw * 0.26, abY, bBits[k], null, lay.small);
+      drawLamp(bx, sumY, sumDisp[k], null);
+    }
+    drawLamp(lay.cinX, by, cinDisp[0], "carry in", lay.small);     // external Cin (togglable)
+    drawLamp(lay.coutX, sumY, coutDisp[3], "carry out", lampR);    // the 5th / top result bit
+    label("SUM", (lay.coutX + lay.blockX(0)) / 2, sumY + lampR + 20, C.muted, 12);
+  }
+
+  // ---- stepping: both views snap instantly (no easing) so they're easy to demo
+  function step() {
+    if (view === "FA") {
+      const v = evalFA(fa.A, fa.B, fa.Cin);
+      for (const p of faParts) dispFA[p.id] = faValue(p, v);
+    } else {
+      const L = evalAdd4();
+      for (let k = 0; k < 4; k++) { cinDisp[k] = L.blocks[k].cin; coutDisp[k] = L.blocks[k].cout; sumDisp[k] = L.blocks[k].sum; }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    if (view === "FA") drawFA(); else drawAdd4();
+  }
+
+  function updateStatus() {
+    const el = $("status");
+    if (view === "FA") {
+      const v = evalFA(fa.A, fa.B, fa.Cin), total = v.s + 2 * v.co;
+      el.textContent = `${fa.A}+${fa.B}+${fa.Cin} = ${total} (${v.co}${v.s})`;
+      el.classList.toggle("hi", total > 0);
+    } else {
+      const A = bitsToNum(aBits), B = bitsToNum(bBits), sum = A + B + cin0;
+      el.textContent = `${A} + ${B}${cin0 ? " + 1" : ""} = ${sum}`;
+      el.classList.toggle("hi", sum > 0);
+    }
+  }
+
+  function frame() { step(); draw(); updateStatus(); requestAnimationFrame(frame); }
+
+  // ---- controls -------------------------------------------------------------
+  function makeSwitch(name, mini, onclick) {
+    const b = document.createElement("button");
+    b.className = "switch" + (mini ? " mini" : "");
+    b.innerHTML = '<span class="name">' + name + '</span><span class="track"><span class="thumb"></span></span><span class="val">0</span>';
+    b.onclick = onclick;
+    return b;
+  }
+  const setSwitch = (b, on) => { b.classList.toggle("on", on); b.querySelector(".val").textContent = on ? "1" : "0"; };
+
+  function buildDeck() {
+    const host = $("deck"); host.innerHTML = "";
+    if (view === "FA") {
+      const row = document.createElement("div"); row.className = "inputs";
+      ["A", "B", "Cin"].forEach((name) => {
+        const b = makeSwitch(name, false, () => { fa[name] = fa[name] ? 0 : 1; setSwitch(b, fa[name]); });
+        setSwitch(b, fa[name]); row.appendChild(b);
+      });
+      host.appendChild(row);
+    } else {
+      const mkRow = (labelTxt, bits) => {
+        const grp = document.createElement("div"); grp.className = "bitgroup";
+        const lab = document.createElement("span"); lab.className = "rowlab"; lab.textContent = labelTxt; grp.appendChild(lab);
+        for (let k = 3; k >= 0; k--) {                 // MSB first, matching the on-screen order
+          const b = makeSwitch(String(k), true, () => { bits[k] = bits[k] ? 0 : 1; setSwitch(b, bits[k]); });
+          setSwitch(b, bits[k]); grp.appendChild(b);
+        }
+        return grp;
+      };
+      host.appendChild(mkRow("A", aBits));
+      host.appendChild(mkRow("B", bBits));
+      const cinGrp = document.createElement("div"); cinGrp.className = "bitgroup";
+      const cb = makeSwitch("Cin", true, () => { cin0 = cin0 ? 0 : 1; setSwitch(cb, cin0); });
+      setSwitch(cb, cin0); cinGrp.appendChild(cb);
+      host.appendChild(cinGrp);
+    }
+    const reset = document.createElement("button"); reset.className = "btn"; reset.textContent = "Reset";
+    reset.onclick = () => {
+      if (view === "FA") { fa.A = fa.B = fa.Cin = 0; } else { aBits.fill(0); bBits.fill(0); cin0 = 0; }
+      buildDeck();
+    };
+    host.appendChild(reset);
+  }
+
+  function selectView(v) {
+    view = v;
+    $("eyebrow").textContent = v === "FA" ? "1-bit full adder" : "4-bit ripple-carry adder";
+    [...$("seg").children].forEach((b) => b.classList.toggle("on", b.dataset.view === v));
+    computeLayout(); seedDisp(); buildDeck();
+  }
+
+  [...$("seg").children].forEach((b) => { b.onclick = () => selectView(b.dataset.view); });
+  $("theme-btn").onclick = () => {
+    const cur = document.documentElement.getAttribute("data-theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); selectView("FA"); requestAnimationFrame(frame);
+})();
+</script>
