@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tiny CPU Challenge</title>
+<title>Tiny CPU Warm-up</title>
 <style>
   :root {
     --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
@@ -26,8 +26,6 @@
   .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
   h1 { font-size: 1.15rem; margin: 4px 0 0; font-weight: 600; }
   .who { display: flex; align-items: center; gap: 10px; }
-  #name { font-family: var(--mono); font-size: .82rem; background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; width: 170px; }
-  #name:focus { outline: none; border-color: var(--accent); }
 
   .cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
   @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
@@ -79,8 +77,6 @@
   .metric .v { font-size: 1.5rem; }
   .metric .p { font-size: .72rem; color: var(--muted); }
   .metric .star { color: var(--pc); }
-  .verify { font-family: var(--mono); font-size: .78rem; color: var(--muted); margin-top: 8px; min-height: 1em; }
-  .verify b { color: var(--acc); letter-spacing: .1em; }
 
   /* processor */
   .regs { display: flex; flex-direction: column; gap: 10px; }
@@ -97,6 +93,7 @@
   .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
   select { font-family: var(--mono); }
   select { background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: .8rem; }
+  .howto { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin: 12px 0 0; }
 
   .ref table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .74rem; }
   .ref td { padding: 3px 6px; border-bottom: 1px solid var(--border); }
@@ -111,11 +108,10 @@
 <div class="wrap">
   <div class="bar">
     <div>
-      <div class="eyebrow">Course finale · Challenge</div>
-      <h1>Tiny CPU Challenge</h1>
+      <div class="eyebrow">Before the finale · Warm-up</div>
+      <h1>Tiny CPU Warm-up</h1>
     </div>
     <div class="who">
-      <input id="name" placeholder="your name" autocomplete="off" spellcheck="false">
       <button class="btn" id="theme">Light / dark</button>
     </div>
   </div>
@@ -147,9 +143,9 @@
     <div class="side">
       <div class="panel task">
         <div class="tasknav">
-          <button class="btn nav" id="prev" title="Previous task">‹</button>
+          <button class="btn nav" id="prev" title="Previous drill">‹</button>
           <select id="tasksel"></select>
-          <button class="btn nav" id="next" title="Next task">›</button>
+          <button class="btn nav" id="next" title="Next drill">›</button>
         </div>
         <div class="spec" id="spec"></div>
         <div class="goal" id="goal"></div>
@@ -160,7 +156,6 @@
         <div class="verdict" id="verdict">Not checked</div>
         <div class="reason" id="reason">Write a program, then press Check.</div>
         <div class="metrics" id="metrics"></div>
-        <div class="verify" id="verify"></div>
       </div>
 
       <div class="panel">
@@ -179,6 +174,7 @@
     <button class="btn" id="step">Step</button>
     <button class="btn" id="reset">Reset</button>
   </div>
+  <p class="howto">Step runs one instruction so you can watch the PC march and the ACC change · Check tests your program · Reset restores it.</p>
 </div>
 
 <script>
@@ -186,60 +182,51 @@
 const memSize = 16;
 const stepCap = 2000;
 
-// Each task: the input cells (locked, filled from case 1), the output cell
-// (locked, starts 0), a battery of test cases, and a goal predicate. size par
-// was locked by simulating a reference solution.
+// Warm-up drills — one mechanic per rung, tiny numbers, distinct from the
+// real challenge tasks. Same shape as the challenge: locked input cells, one
+// locked output cell, a small case battery, and a goal predicate.
 const tasks = [
-  { name: "Copy", inputs: [15], output: 14, parSize: 2,
+  { name: "Move a number", inputs: [15], output: 12, parSize: 2,
     spec: "cell 15 holds a number.",
-    goal: "Copy it into cell 14.",
-    cases: [{15:7}, {15:3}, {15:12}],
-    ok: (m,c) => m[14] === c[15] },
+    goal: "Copy it into cell 12.",
+    hint: "LOAD pulls a cell into the accumulator, STORE writes the accumulator back. Watch how the address nibble picks the cell.",
+    cases: [{15:7}, {15:3}, {15:9}],
+    ok: (m,c) => m[12] === c[15] },
 
-  { name: "Add two", inputs: [14,15], output: 13, parSize: 3,
-    spec: "cells 14 and 15 hold two numbers.",
-    goal: "Put their sum in cell 13.",
-    cases: [{14:5,15:6}, {14:3,15:2}, {14:8,15:1}],
-    ok: (m,c) => m[13] === c[14] + c[15] },
+  { name: "Stash a 5", inputs: [], output: 13, parSize: 3,
+    spec: "no inputs — the memory starts empty.",
+    goal: "Put the number 5 into cell 13.",
+    hint: "there's no “type a 5” instruction — write 5 into a spare cell as data (its bits read as HALT, but you only LOAD it, never run it), then STORE it into 13.",
+    cases: [{}],
+    ok: (m) => m[13] === 5 },
 
-  { name: "Sum four", inputs: [12,13,14,15], output: 11, parSize: 5,
-    spec: "cells 12–15 hold four numbers.",
-    goal: "Put their total in cell 11.",
-    cases: [{12:1,13:2,14:3,15:4}, {12:5,13:5,14:5,15:5}, {12:9,13:0,14:2,15:7}],
-    ok: (m,c) => m[11] === c[12] + c[13] + c[14] + c[15] },
-
-  { name: "Difference", inputs: [14,15], output: 13, parSize: 3,
-    spec: "cell 14 = A, cell 15 = B  (B ≥ A).",
-    goal: "Put B − A in cell 13.",
-    cases: [{14:3,15:9}, {14:4,15:4}, {14:1,15:12}],
-    ok: (m,c) => m[13] === c[15] - c[14] },
-
-  { name: "Triple it", inputs: [15], output: 14, parSize: 4,
+  { name: "Add a little", inputs: [15], output: 14, parSize: 4,
     spec: "cell 15 holds a number.",
-    goal: "Put three times it in cell 14.",
-    cases: [{15:4}, {15:1}, {15:7}],
-    ok: (m,c) => m[14] === 3 * c[15] },
+    goal: "Put that number plus 3 in cell 14.",
+    hint: "keep a spare cell holding 3, then LOAD 15 and ADD that cell.",
+    cases: [{15:2}, {15:5}, {15:6}],
+    ok: (m,c) => m[14] === c[15] + 3 },
 
-  { name: "Multiply", inputs: [14,15], output: 13, parSize: 10,
-    spec: "cell 14 = A, cell 15 = B.",
-    goal: "Put A × B in cell 13.",
-    hint: "add A to itself B times — you'll need a loop.",
-    cases: [{14:4,15:3}, {14:7,15:2}, {14:5,15:5}],
-    ok: (m,c) => m[13] === c[14] * c[15] },
+  { name: "Take from ten", inputs: [15], output: 14, parSize: 4,
+    spec: "cell 15 holds a number (10 or less).",
+    goal: "Put 10 minus that number in cell 14.",
+    hint: "order matters — LOAD 10 first, then SUB the cell. Try it the other way round and watch it go wrong.",
+    cases: [{15:4}, {15:7}, {15:1}],
+    ok: (m,c) => m[14] === 10 - c[15] },
 
-  { name: "Divide", inputs: [14,15], output: 13, parSize: 9,
-    spec: "cell 14 = A, cell 15 = B.  B divides A evenly.",
-    goal: "Put A ÷ B in cell 13.",
-    hint: "count how many times you can subtract B before you hit 0.",
-    cases: [{14:12,15:3}, {14:10,15:5}, {14:9,15:3}],
-    ok: (m,c) => m[13] === c[14] / c[15] },
-
-  { name: "★ Square (bonus)", inputs: [15], output: 14, parSize: 12,
+  { name: "If it's zero", inputs: [15], output: 14, parSize: 5,
     spec: "cell 15 holds a number.",
-    goal: "Put it squared in cell 14.",
-    hint: "a number times itself — reuse your Multiply idea.",
-    cases: [{15:4}, {15:6}, {15:3}],
-    ok: (m,c) => m[14] === c[15] * c[15] },
+    goal: "If it is zero, put 7 in cell 14; if not, leave cell 14 at 0.",
+    hint: "LOAD 15, then JMPZ to the part that writes 7. When it isn't zero, fall straight into an empty (HALT) cell.",
+    cases: [{15:0}, {15:3}, {15:8}],
+    ok: (m,c) => m[14] === (c[15] === 0 ? 7 : 0) },
+
+  { name: "Leap over data", inputs: [1], output: 15, parSize: 3,
+    spec: "cell 1 holds a number, sitting right where the PC starts marching.",
+    goal: "Copy cell 1 into cell 15.",
+    hint: "the PC starts at 0 and would try to run cell 1 as an instruction. JUMP past it first, then LOAD 1 and STORE 15.",
+    cases: [{1:6}, {1:9}, {1:3}],
+    ok: (m,c) => m[15] === c[1] },
 ];
 
 const names = { 0: "HALT", 1: "LOAD", 2: "STORE", 3: "ADD", 4: "SUB", 5: "JUMP", 6: "JMPZ" };
@@ -324,25 +311,6 @@ function sizeOf(t, program) {
   return n;
 }
 
-// Shared secret — must match tiny_cpu_grade.py. Deters editing a screenshot, not a forger.
-const verifySecret = "sand2cpu";
-
-// FNV-1a 32-bit, returned as 8 uppercase hex chars.
-function fnv(str) {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h >>> 0).toString(16).toUpperCase().padStart(8, "0");
-}
-
-// A verify code carries the scorable facts so the grader can decode them:
-// a base-36 payload packing (task, size, pass) plus a name-bound checksum.
-function verifyCode(taskIdx, size, pass, name) {
-  const payload = (taskIdx * 100 + size) * 2 + (pass ? 1 : 0);
-  const body = payload.toString(36).toUpperCase().padStart(4, "0");
-  const check = fnv(name + "|" + payload + "|" + verifySecret).slice(0, 4);
-  return body + "-" + check;
-}
-
 function loadTask(idx) {
   state.idx = idx;
   const t = task();
@@ -424,8 +392,7 @@ function renderProgress() {
   tasks.forEach((t, i) => {
     const d = document.createElement("button");
     d.className = "dot" + (i === state.idx ? " current" : "") + (passed[i] ? " done" : "");
-    const label = t.name.replace("★ ", "").replace(" (bonus)", "");
-    d.innerHTML = (passed[i] ? '<span class="tick">✓</span> ' : "") + label;
+    d.innerHTML = (passed[i] ? '<span class="tick">✓</span> ' : "") + t.name;
     d.onclick = () => loadTask(i);
     host.appendChild(d);
   });
@@ -443,11 +410,10 @@ function renderResult() {
   const verdict = document.getElementById("verdict");
   const reason = document.getElementById("reason");
   const metrics = document.getElementById("metrics");
-  const verify = document.getElementById("verify");
   if (!r) {
     verdict.textContent = "Not checked"; verdict.className = "verdict";
     reason.textContent = "Write a program, then press Check.";
-    metrics.innerHTML = ""; verify.innerHTML = "";
+    metrics.innerHTML = "";
     return;
   }
   verdict.textContent = r.pass ? "PASS" : "FAIL";
@@ -457,7 +423,6 @@ function renderResult() {
   const sizeStar = r.size <= t.parSize ? '<span class="star">★</span>' : "";
   metrics.innerHTML =
     `<div class="metric"><div class="k">size</div><div class="v">${r.size} ${sizeStar}</div><div class="p">par ${t.parSize}</div></div>`;
-  verify.innerHTML = r.pass ? `verify code &nbsp;<b>${r.verify}</b>` : "";
 }
 
 function checkTask() {
@@ -473,20 +438,17 @@ function checkTask() {
   });
 
   let reason;
-  if (allPass) reason = "Correct on all tests. Nice.";
+  if (allPass) reason = "Correct on every test. Nice.";
   else if (anyStalled) reason = "Your program never stopped (over " + stepCap + " steps) — check for an infinite loop.";
   else reason = "Runs, but the answer is wrong on at least one test.";
 
-  const name = document.getElementById("name").value.trim() || "anon";
-  const verify = verifyCode(state.idx, size, allPass, name);
-
-  results[state.idx] = { pass: allPass, size, reason, verify };
+  results[state.idx] = { pass: allPass, size, reason };
   if (allPass) passed[state.idx] = true;
 
-  // show the clean authored program (case 1) so the screenshot is tidy
+  // show the clean authored program (case 1) so the display is tidy
   state.mem = buildMem(t, program, t.cases[0]);
   state.pc = 0; state.acc = 0; state.halted = false; state.touched = -1;
-  setStatus(allPass ? "PASS — screenshot this for submission." : "Not yet — keep going.", !allPass);
+  setStatus(allPass ? "Correct — try the next drill." : "Not yet — keep going.", !allPass);
   render();
 }
 
@@ -529,7 +491,6 @@ document.getElementById("step").onclick = stepOnce;
 document.getElementById("reset").onclick = resetWatch;
 document.getElementById("prev").onclick = () => loadTask((state.idx - 1 + tasks.length) % tasks.length);
 document.getElementById("next").onclick = () => loadTask((state.idx + 1) % tasks.length);
-document.getElementById("name").addEventListener("input", () => { clearResult(); renderResult(); });
 document.getElementById("theme").onclick = () => {
   const root = document.documentElement;
   root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
@@ -538,7 +499,7 @@ document.getElementById("theme").onclick = () => {
 const sel = document.getElementById("tasksel");
 tasks.forEach((t, i) => {
   const o = document.createElement("option");
-  o.value = String(i); o.textContent = `Task ${i + 1} / ${tasks.length} — ${t.name}`;
+  o.value = String(i); o.textContent = `Drill ${i + 1} / ${tasks.length} — ${t.name}`;
   sel.appendChild(o);
 });
 sel.onchange = (e) => loadTask(parseInt(e.target.value, 10));

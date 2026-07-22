@@ -1,0 +1,430 @@
+<title>4→16 decoder — one output hot</title>
+<style>
+  :root {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c;
+    --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+      --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+      --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff;
+      --ok: #1f9d57;
+      --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1116; --panel: #131c22; --panel-2: #0f171c; --border: #24323b;
+    --ink: #e6edf1; --muted: #8a9ba6; --grid: #1d2a32;
+    --sig-in: #e3b341; --sig-c: #3fc5e6; --sig-r: #f07649; --accent: #3fc5e6; --accent-ink: #04222c; --ok: #5fd08a;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 34px -20px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"] {
+    --bg: #e9eef1; --panel: #ffffff; --panel-2: #f3f6f8; --border: #d3dde2;
+    --ink: #17242c; --muted: #5b6b74; --grid: #e3eaee;
+    --sig-in: #b9821f; --sig-c: #1298bf; --sig-r: #d85a2c; --accent: #1298bf; --accent-ink: #ffffff; --ok: #1f9d57;
+    --shadow: 0 1px 0 rgba(255,255,255,.6), 0 14px 30px -22px rgba(20,40,55,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; padding: clamp(14px, 2.4vw, 34px); -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  .bar-right { display: flex; align-items: center; gap: 12px; }
+  .pill { font-family: var(--mono); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; padding: 7px 15px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--panel-2); }
+  .pill.hi { color: var(--accent-ink); background: var(--sig-in); border-color: transparent; }
+  .icon-btn { font-family: var(--mono); font-size: .95rem; line-height: 1; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--ink); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 3px; gap: 2px; }
+  .seg button { font-family: var(--mono); font-size: .82rem; letter-spacing: .08em; color: var(--muted); background: transparent; border: 0; padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { color: var(--accent-ink); background: var(--accent); }
+
+  .stage { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  canvas { display: block; width: 100%; height: clamp(640px, 82vw, 900px); }
+
+  .deck { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 22px; padding: 2px; }
+  .btn { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 10px 18px; border-radius: 9px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+
+  .inputs { display: flex; flex-wrap: wrap; gap: 12px; }
+  .switch { font-family: var(--mono); font-size: .82rem; letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--border); padding: 8px 12px 8px 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 11px; }
+  .switch:hover { border-color: var(--accent); }
+  .switch .name { font-weight: 600; color: var(--muted); }
+  .switch.on .name { color: var(--sig-in); }
+  .switch .track { width: 34px; height: 18px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); position: relative; transition: background .15s, border-color .15s; }
+  .switch .thumb { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: left .15s, background .15s; }
+  .switch.on .track { background: var(--sig-in); border-color: transparent; }
+  .switch.on .thumb { left: 17px; background: var(--accent-ink); }
+  .switch .val { min-width: 1ch; text-align: center; color: var(--muted); }
+  .switch.on .val { color: var(--sig-in); }
+
+  .rng { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: .78rem; letter-spacing: .04em; color: var(--muted); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 148px; height: 4px; border-radius: 999px; background: var(--border); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 0; }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 0; }
+
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="shell">
+    <div class="bar">
+      <span class="eyebrow">4→16 decoder · exactly one output high</span>
+      <div class="bar-right">
+        <span class="pill" id="status">Y0</span>
+        <button class="icon-btn" id="theme-btn" title="Toggle light / dark">◐</button>
+      </div>
+    </div>
+
+    <div class="stage"><canvas id="scene" aria-label="A 4-to-16 line decoder shown two ways side by side. Left: a block diagram — a chip with four address inputs A3..A0 and sixteen outputs Y0..Y15, with exactly one output lit. Right: the same decoder as logic — four inverters make the complement of each input, giving eight vertical true/complement rails, and sixteen four-input AND gates each tap the unique combination of rails that matches one input number, so the AND gate whose pattern matches lights its output."></canvas></div>
+
+    <div class="deck">
+      <div class="inputs" id="inputs"></div>
+      <div class="seg" id="mode"></div>
+      <div id="count-ctrl"></div>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cssv = getComputedStyle(document.documentElement);
+  const mono = cssv.getPropertyValue("--mono");
+
+  let C = {};
+  function refreshColors() {
+    const c = getComputedStyle(document.documentElement), g = (n) => c.getPropertyValue(n).trim();
+    C = { ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), panel2: g("--panel-2"),
+      border: g("--border"), sin: g("--sig-in"), accent: g("--accent"), aink: g("--accent-ink"),
+      ok: g("--ok"), bg: g("--bg"), panel: g("--panel") };
+  }
+  refreshColors();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---- the decoder, as logic ----------------------------------------------
+  // Four address bits A3..A0 (a[0] is the MSB). Each bit is available two ways:
+  // straight through (the "true" rail) and through an inverter (the "complement"
+  // rail) — eight rails in all. Output k is one 4-input AND gate wired to the ONE
+  // combination of rails that spells out k in binary: pick the true rail where
+  // k's bit is 1, the complement rail where it is 0. That AND gate reads high only
+  // when the address equals k, so exactly one of the sixteen outputs is ever hot.
+  const a = [0, 0, 0, 0];              // [A3, A2, A1, A0]
+  const rail = new Array(8).fill(0);   // [A3, ~A3, A2, ~A2, A1, ~A1, A0, ~A0]
+  const out = new Array(16).fill(0);
+  let value = 0;
+  const da = [0, 0, 0, 0], drail = new Array(8).fill(0), dout = new Array(16).fill(0);
+
+  let mode = "manual", speed = 55, acc = 0, dirty = false;
+
+  function setBits(v) { a[0] = (v >> 3) & 1; a[1] = (v >> 2) & 1; a[2] = (v >> 1) & 1; a[3] = v & 1; }
+  function compute() {
+    value = (a[0] << 3) | (a[1] << 2) | (a[2] << 1) | a[3];
+    for (let i = 0; i < 4; i++) { rail[2 * i] = a[i]; rail[2 * i + 1] = a[i] ? 0 : 1; }
+    for (let k = 0; k < 16; k++) out[k] = k === value ? 1 : 0;
+  }
+
+  function step(dt) {
+    dt = Math.min(dt, 0.05);
+    if (mode === "auto") {
+      const interval = lerp(0.9, 0.12, speed / 100);
+      acc += dt;
+      while (acc >= interval) { acc -= interval; setBits((value + 1) % 16); dirty = true; }
+    }
+    compute();
+    if (dirty) { syncInputs(); dirty = false; }
+
+    const e = 1 - Math.pow(0.005, dt);
+    for (let i = 0; i < 4; i++) da[i] += (a[i] - da[i]) * e;
+    for (let i = 0; i < 8; i++) drail[i] += (rail[i] - drail[i]) * e;
+    for (let k = 0; k < 16; k++) dout[k] += (out[k] - dout[k]) * e;
+  }
+
+  // ---- canvas + layout (all coordinates live here, easy to hand-tune) ------
+  const cv = $("scene");
+  let ctx, W, H, DPR, g = {};
+
+  function fit() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    const pad = clamp(W * 0.02, 10, 22), gap = clamp(W * 0.02, 12, 26);
+    const split = W * 0.36;
+    const lx0 = pad, lx1 = split - gap, lw = lx1 - lx0;
+    const rx0 = split + gap, rx1 = W - pad, rw = rx1 - rx0;
+
+    const rowTop = H * 0.20, rowBot = H * 0.965, rowH = (rowBot - rowTop) / 16;
+    const lampR = clamp(W * 0.013, 9, 14);
+
+    // right panel: 8 rails, header inverters, 16 gates
+    const rax0 = rx0 + rw * 0.17, rax1 = rx0 + rw * 0.46;
+    const railX = []; for (let i = 0; i < 8; i++) railX.push(lerp(rax0, rax1, i / 7));
+    const hy0 = H * 0.055, hStep = H * 0.03, headY = [0, 1, 2, 3].map((i) => hy0 + i * hStep);
+    const invW = clamp(rw * 0.045, 12, 20), invH = clamp(H * 0.028, 14, 24), ibr = clamp(invH * 0.16, 3, 5);
+    const compTopY = headY.map((y) => y + invH + 2 * ibr);
+    const railBot = rowBot;
+    const gateX = rx0 + rw * 0.60, gbw = clamp(rw * 0.11, 26, 46), gbh = clamp(rowH * 0.62, 12, 24);
+    const portOff = [-0.32, -0.11, 0.11, 0.32].map((f) => f * gbh);
+    const outLampX = rx1 - clamp(rw * 0.12, 30, 54);
+    const inLampX = rx0 + clamp(rw * 0.06, 30, 44);
+
+    // left panel: the chip
+    const boxTop = rowTop, boxBot = rowBot;
+    const bxL = lx0 + lw * 0.34, bxR = lx0 + lw * 0.66;
+    const inLampBX = lx0 + lampR + clamp(lw * 0.07, 22, 34);
+    const outDotX = bxR + lw * 0.07, outLabelX = outDotX + 9;
+
+    g = { pad, gap, split, lx0, lx1, lw, rx0, rx1, rw, rowTop, rowBot, rowH, lampR,
+      railX, headY, invW, invH, ibr, compTopY, railBot, gateX, gbw, gbh, portOff, outLampX, inLampX,
+      boxTop, boxBot, bxL, bxR, inLampBX, outDotX, outLabelX,
+      leftCX: (lx0 + lx1) / 2, rightCX: (rx0 + rx1) / 2, cxB: (bxL + bxR) / 2 };
+  }
+  const rowY = (k) => g.rowTop + (k + 0.5) * g.rowH;
+
+  // ---- drawing helpers -----------------------------------------------------
+  const mix = (a, b, t) => {
+    t = clamp(t, 0, 1);
+    const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const pa = p(a.length === 7 ? a : "#888888"), pb = p(b.length === 7 ? b : "#888888");
+    return `rgb(${Math.round(lerp(pa[0], pb[0], t))},${Math.round(lerp(pa[1], pb[1], t))},${Math.round(lerp(pa[2], pb[2], t))})`;
+  };
+  const hot = (v) => mix(C.muted, C.sin, v);
+  const label = (txt, x, y, col, size, align) => {
+    ctx.fillStyle = col; ctx.font = "600 " + (size || 12) + "px " + mono;
+    ctx.textAlign = align || "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y);
+  };
+  const dot = (x, y, r, col, glow) => {
+    ctx.save(); if (glow) { ctx.shadowColor = col; ctx.shadowBlur = glow; }
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.restore();
+  };
+  function wire(pts, v) {
+    const col = hot(v);
+    ctx.save();
+    ctx.globalAlpha = lerp(0.42, 1, v);
+    ctx.shadowColor = col; ctx.shadowBlur = lerp(0, 9, v);
+    ctx.strokeStyle = col; ctx.lineWidth = lerp(1.6, 3.2, v); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke(); ctx.restore();
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function lamp(x, y, bit, disp, text, opt) {
+    opt = opt || {};
+    const r = opt.r || g.lampR, on = disp > 0.5;
+    ctx.save();
+    if (on) { ctx.shadowColor = C.sin; ctx.shadowBlur = 16; }
+    ctx.fillStyle = mix(C.panel2, C.sin, disp); ctx.strokeStyle = on ? C.sin : C.muted; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+    label(bit ? "1" : "0", x, y, on ? C.aink : C.muted, r * 0.9);
+    if (text) {
+      if (opt.side === "right") label(text, x + r + 6, y, hot(disp), opt.size || 11, "left");
+      else if (opt.side === "left") label(text, x - r - 6, y, hot(disp), opt.size || 11, "right");
+      else label(text, x, y + r + 13, hot(disp), opt.size || 11);
+    }
+  }
+
+  function andPath(x0, cy, bw, bh) {          // flat back, round nose — an AND body
+    const r = bh / 2;
+    ctx.beginPath();
+    ctx.moveTo(x0, cy - r); ctx.lineTo(x0 + bw - r, cy - r);
+    ctx.arc(x0 + bw - r, cy, r, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x0, cy + r); ctx.closePath();
+  }
+  function drawAnd(k, cy) {
+    const v = dout[k], hi = v > 0.5, edge = hi ? C.sin : C.border;
+    ctx.save();
+    andPath(g.gateX, cy, g.gbw, g.gbh);
+    ctx.fillStyle = mix(C.panel2, C.sin, v * 0.28); ctx.fill();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 12; }
+    ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2.1 : 1.3; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+  }
+  function drawInv(x, topY, v) {               // downward-pointing inverter: in at top, out at bottom
+    const { invW, invH, ibr } = g, hi = v > 0.5, edge = hi ? C.sin : C.border, bot = topY + invH;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(x - invW / 2, topY); ctx.lineTo(x + invW / 2, topY); ctx.lineTo(x, bot); ctx.closePath();
+    ctx.fillStyle = mix(C.panel2, C.sin, v * 0.22); ctx.fill();
+    if (hi) { ctx.shadowColor = C.sin; ctx.shadowBlur = 10; }
+    ctx.strokeStyle = edge; ctx.lineWidth = hi ? 2 : 1.3; ctx.lineJoin = "round"; ctx.stroke();
+    ctx.restore();
+    ctx.save(); ctx.fillStyle = C.panel; ctx.strokeStyle = edge; ctx.lineWidth = hi ? 1.8 : 1.3;
+    ctx.beginPath(); ctx.arc(x, bot + ibr, ibr, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+
+  const inName = (i) => "A" + (3 - i);
+  const inWeight = (i) => String(1 << (3 - i));
+
+  // ---- the block diagram (left) --------------------------------------------
+  function drawBlock() {
+    const { lx0, boxTop, boxBot, bxL, bxR, inLampBX, outDotX, outLabelX, cxB, lampR } = g;
+    label("BLOCK DIAGRAM", g.leftCX, H * 0.028, C.muted, 11, "center");
+
+    roundRect(bxL, boxTop, bxR - bxL, boxBot - boxTop, clamp(g.lw * 0.04, 8, 16));
+    ctx.save(); ctx.fillStyle = C.panel2; ctx.fill();
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1.6; ctx.stroke(); ctx.restore();
+
+    // inputs on the left edge
+    for (let i = 0; i < 4; i++) {
+      const iy = boxTop + (i + 0.5) * (boxBot - boxTop) / 4;
+      wire([[inLampBX + lampR, iy], [bxL, iy]], da[i]);
+      lamp(inLampBX, iy, a[i], da[i], null);
+      label(inName(i), inLampBX - lampR - 6, iy - 5, hot(da[i]), 12, "right");
+      label(inWeight(i), inLampBX - lampR - 6, iy + 9, C.muted, 9, "right");
+    }
+
+    // chip text
+    label("4 → 16", cxB, boxTop + (boxBot - boxTop) * 0.14, C.muted, 12);
+    label("DECODER", cxB, boxTop + (boxBot - boxTop) * 0.14 + 16, C.muted, 10);
+    const midB = (boxTop + boxBot) / 2;
+    label(String(value), cxB, midB, C.ink, clamp(g.lw * 0.17, 32, 62));
+    label("→ Y" + value, cxB, midB + clamp(g.lw * 0.17, 32, 62) * 0.62, C.sin, 13);
+
+    // outputs on the right edge
+    for (let k = 0; k < 16; k++) {
+      const y = rowY(k);
+      wire([[bxR, y], [outDotX, y]], dout[k]);
+      dot(outDotX, y, lampR * 0.42, mix(C.panel2, C.sin, dout[k]), dout[k] > 0.5 ? 14 : 0);
+      if (dout[k] < 0.5) { ctx.save(); ctx.strokeStyle = C.muted; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(outDotX, y, lampR * 0.42, 0, 7); ctx.stroke(); ctx.restore(); }
+      label("Y" + k, outLabelX, y, dout[k] > 0.5 ? C.sin : C.muted, 10, "left");
+    }
+  }
+
+  // ---- the logic (right) ---------------------------------------------------
+  function drawLogic() {
+    const { railX, headY, compTopY, railBot, inLampX, lampR, gateX, gbw, portOff, outLampX } = g;
+    label("LOGIC · 16 four-input AND gates", g.rightCX, H * 0.028, C.muted, 11, "center");
+
+    // eight vertical rails: true + complement for each input
+    for (let i = 0; i < 4; i++) {
+      wire([[railX[2 * i], headY[i]], [railX[2 * i], railBot]], drail[2 * i]);
+      wire([[railX[2 * i + 1], compTopY[i]], [railX[2 * i + 1], railBot]], drail[2 * i + 1]);
+    }
+
+    // header: each input feeds its true rail directly and its complement rail via an inverter
+    for (let i = 0; i < 4; i++) {
+      const ly = headY[i], tx = railX[2 * i], cx = railX[2 * i + 1];
+      wire([[inLampX + lampR, ly], [cx, ly]], da[i]);
+      dot(tx, ly, 3, hot(da[i]), da[i] > 0.5 ? 6 : 0);
+      drawInv(cx, ly, drail[2 * i + 1]);
+      lamp(inLampX, ly, a[i], da[i], inName(i), { side: "left", size: 11 });
+    }
+
+    // sixteen AND gates, each tapping the rails that spell its number
+    for (let k = 0; k < 16; k++) {
+      const cy = rowY(k);
+      for (let i = 0; i < 4; i++) {
+        const bit = (k >> (3 - i)) & 1, idx = bit ? 2 * i : 2 * i + 1;
+        const py = cy + portOff[i];
+        wire([[railX[idx], py], [gateX, py]], drail[idx]);
+        dot(railX[idx], py, 2.6, hot(drail[idx]), drail[idx] > 0.5 ? 5 : 0);
+      }
+      drawAnd(k, cy);
+      wire([[gateX + gbw, cy], [outLampX - lampR, cy]], dout[k]);
+      lamp(outLampX, cy, out[k], dout[k], "Y" + k, { side: "right", size: 10 });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // faint band linking the block's live output to its AND gate row
+    const by = rowY(value);
+    ctx.save(); ctx.fillStyle = C.sin; ctx.globalAlpha = 0.07;
+    ctx.fillRect(g.lx0, by - g.rowH * 0.46, W - 2 * g.pad, g.rowH * 0.92);
+    ctx.restore();
+    // divider
+    ctx.save(); ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(g.split, H * 0.04); ctx.lineTo(g.split, H * 0.98); ctx.stroke(); ctx.restore();
+    drawBlock();
+    drawLogic();
+  }
+
+  function updateStatus() {
+    const el = $("status");
+    el.textContent = "Y" + value + " · " + value.toString(2).padStart(4, "0");
+    el.classList.add("hi");
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = (now - last) / 1000; last = now; step(dt); draw(); updateStatus(); requestAnimationFrame(frame); }
+
+  // ---- controls ------------------------------------------------------------
+  function buildInputs() {
+    const host = $("inputs"); host.innerHTML = "";
+    for (let i = 0; i < 4; i++) {
+      const b = document.createElement("button");
+      b.className = "switch"; b.dataset.i = String(i);
+      b.innerHTML = '<span class="name">' + inName(i) + '</span>'
+        + '<span class="track"><span class="thumb"></span></span>'
+        + '<span class="val">0</span>';
+      b.onclick = () => { if (mode === "auto") { mode = "manual"; buildCountCtrl(); syncMode(); } a[i] = a[i] ? 0 : 1; syncInputs(); };
+      host.appendChild(b);
+    }
+    syncInputs();
+  }
+  function syncInputs() {
+    const kids = $("inputs").children;
+    for (let i = 0; i < kids.length; i++) {
+      const on = a[i] === 1;
+      kids[i].classList.toggle("on", on);
+      kids[i].querySelector(".val").textContent = on ? "1" : "0";
+    }
+  }
+
+  function buildMode() {
+    const host = $("mode"); host.innerHTML = "";
+    [["manual", "Set bits"], ["auto", "Count 0→15"]].forEach(([id, txt]) => {
+      const b = document.createElement("button");
+      b.textContent = txt; b.dataset.mode = id; b.classList.toggle("on", id === mode);
+      b.onclick = () => { mode = id; buildCountCtrl(); syncMode(); };
+      host.appendChild(b);
+    });
+  }
+  function syncMode() { for (const b of $("mode").children) b.classList.toggle("on", b.dataset.mode === mode); }
+
+  function buildCountCtrl() {
+    const host = $("count-ctrl"); host.innerHTML = "";
+    if (mode !== "auto") return;
+    const box = document.createElement("label"); box.className = "rng"; box.innerHTML = "<span>slow</span>";
+    const r = document.createElement("input");
+    r.type = "range"; r.min = "0"; r.max = "100"; r.value = String(speed);
+    r.oninput = () => { speed = Number(r.value); };
+    box.appendChild(r);
+    const fast = document.createElement("span"); fast.textContent = "fast"; box.appendChild(fast);
+    host.appendChild(box);
+  }
+
+  $("reset-btn").onclick = () => { a[0] = a[1] = a[2] = a[3] = 0; acc = 0; mode = "manual"; syncInputs(); buildCountCtrl(); syncMode(); };
+  $("theme-btn").onclick = () => {
+    const cur = document.documentElement.getAttribute("data-theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  };
+
+  new ResizeObserver(fit).observe(cv);
+  window.addEventListener("resize", fit);
+  fit(); buildInputs(); buildMode(); buildCountCtrl(); requestAnimationFrame(frame);
+})();
+</script>
