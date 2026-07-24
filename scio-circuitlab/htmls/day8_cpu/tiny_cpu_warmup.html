@@ -193,26 +193,12 @@ const tasks = [
     cases: [{15:7}, {15:3}, {15:9}],
     ok: (m,c) => m[12] === c[15] },
 
-  { name: "Stash a 5", inputs: [], output: 13, parSize: 3,
-    spec: "no inputs — the memory starts empty.",
-    goal: "Put the number 5 into cell 13.",
-    hint: "there's no “type a 5” instruction — write 5 into a spare cell as data (its bits read as HALT, but you only LOAD it, never run it), then STORE it into 13.",
-    cases: [{}],
-    ok: (m) => m[13] === 5 },
-
   { name: "Add a little", inputs: [15], output: 14, parSize: 4,
     spec: "cell 15 holds a number.",
     goal: "Put that number plus 3 in cell 14.",
-    hint: "keep a spare cell holding 3, then LOAD 15 and ADD that cell.",
+    hint: "keep a spare cell holding 3 (its bits read as HALT, but you only ADD it, never run it), then LOAD 15 and ADD that cell.",
     cases: [{15:2}, {15:5}, {15:6}],
     ok: (m,c) => m[14] === c[15] + 3 },
-
-  { name: "Take from ten", inputs: [15], output: 14, parSize: 4,
-    spec: "cell 15 holds a number (10 or less).",
-    goal: "Put 10 minus that number in cell 14.",
-    hint: "order matters — LOAD 10 first, then SUB the cell. Try it the other way round and watch it go wrong.",
-    cases: [{15:4}, {15:7}, {15:1}],
-    ok: (m,c) => m[14] === 10 - c[15] },
 
   { name: "If it's zero", inputs: [15], output: 14, parSize: 5,
     spec: "cell 15 holds a number.",
@@ -220,13 +206,6 @@ const tasks = [
     hint: "LOAD 15, then JMPZ to the part that writes 7. When it isn't zero, fall straight into an empty (HALT) cell.",
     cases: [{15:0}, {15:3}, {15:8}],
     ok: (m,c) => m[14] === (c[15] === 0 ? 7 : 0) },
-
-  { name: "Leap over data", inputs: [1], output: 15, parSize: 3,
-    spec: "cell 1 holds a number, sitting right where the PC starts marching.",
-    goal: "Copy cell 1 into cell 15.",
-    hint: "the PC starts at 0 and would try to run cell 1 as an instruction. JUMP past it first, then LOAD 1 and STORE 15.",
-    cases: [{1:6}, {1:9}, {1:3}],
-    ok: (m,c) => m[15] === c[1] },
 ];
 
 const names = { 0: "HALT", 1: "LOAD", 2: "STORE", 3: "ADD", 4: "SUB", 5: "JUMP", 6: "JMPZ" };
